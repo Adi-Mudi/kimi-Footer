@@ -1,0 +1,21 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"esModuleInterop": true,
+		"strict": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"skipLibCheck": true,
+		"resolveJsonModule": true,
+		"outDir": "./dist",
+		"rootDir": "./",
+		"declaration": false,
+		"sourceMap": true,
+		"forceConsistentCasingInFileNames": true,
+		"isolatedModules": true
+	},
+	"include": ["src/**/*", "scripts/**/*", "hooks/**/*", "bin/**/*", "tools/**/*", "test/**/*"],
+	"exclude": ["node_modules", "dist"]
+}

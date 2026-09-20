@@ -1,0 +1,32 @@
+{
+	"name": "kimi-quota-line",
+	"version": "1.3.2",
+	"description": "Sunset-gradient folder + Kimi/MiniMax quota bars on the kimi-code status line",
+	"keywords": ["kimi", "status-line", "quota", "minimax", "footer"],
+	"author": "divakaran",
+	"license": "MIT",
+	"homepage": "https://github.com/MoonshotAI/kimi-cli",
+	"interface": {
+		"displayName": "Kimi Quota Line",
+		"shortDescription": "Sunset folder + Kimi/MiniMax quota bars on the first footer line",
+		"longDescription": "Replaces the first footer line with a sunset-gradient folder path on the left and live Kimi or MiniMax weekly + 5H quota bars on the right. The second footer line stays as kimi-code's built-in (context %, session id, version)."
+	},
+	"skills": "./skills/",
+	"systemPromptPath": "./SYSTEM.md",
+	"sessionStart": {
+		"skill": "quota-line"
+	},
+	"commands": "./commands/",
+	"hooks": [
+		{
+			"event": "SessionStart",
+			"command": "node ./dist/hooks/refresh-cache.js",
+			"timeout": 5
+		},
+		{
+			"event": "SessionHeartbeat",
+			"command": "node ./dist/hooks/refresh-cache.js",
+			"timeout": 30
+		}
+	]
+}

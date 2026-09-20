@@ -1,1 +1,22 @@
-.IDE_Plans
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Dependencies
+node_modules/
+
+# Build artifacts (safety net — each plugin also has its own .gitignore)
+dist/
+
+# Plans live only in this repo, never tracked
+.IDE_Plans/
