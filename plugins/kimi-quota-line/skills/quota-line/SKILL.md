@@ -8,7 +8,7 @@ description: Display Kimi/MiniMax quota on the kimi-code status line. Use when t
 This plugin replaces the first footer line of kimi-code with three columns:
 
 - **Left**: sunset-gradient folder path (magenta ›, orange ›, white folder name).
-- **Center**: git details — branch in cyan bold (with `[wt]` marker inside worktrees), dim ` • ` separator, bright-red dirty file count or `clean`.
+- **Center**: git details — branch in cyan bold, `[wt]` marker in worktrees **blinking** cyan → off → amber (shared 4-phase clock), dim ` • ` separator, bright-red blinking dirty file count or `clean`.
 - **Right**: a live quota bar for the active provider (Kimi or MiniMax). Bars use the same traffic-light colors as pi-footer's status line (#28a745 green, #e0a800 amber, #dc3545 red). The weekly bar is pace-aware — red means "slow down now", not "almost full".
 
 The second footer line is unchanged (kimi-code's built-in: context %, session id, version, hints).

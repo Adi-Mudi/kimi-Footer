@@ -20,3 +20,4 @@ dist/
 
 # Plans live only in this repo, never tracked
 .IDE_Plans/
+.freebuff

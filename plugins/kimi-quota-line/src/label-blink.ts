@@ -82,3 +82,32 @@ export function formatKimiLabel(model: string, now: number = Date.now()): string
 	if (phase === "red") return `${RED}${KIMI_LABEL}${RESET}`;
 	return `${DIM}${BLANK_5}${RESET}`;
 }
+
+const WT_MARKER = "[wt]";
+const WT_BLANK = "    "; // 4 spaces — same visible width as "[wt]"
+const CYAN_BOLD = "\x1b[96m\x1b[1m";
+const AMBER_BOLD = "\x1b[38;2;224;168;0m\x1b[1m"; // bar warning color #e0a800
+const OFF_ALL = "\x1b[22m\x1b[39m";
+
+/**
+ * Format the [wt] worktree marker with the shared 4-phase blink cycle
+ * (cyan → off → amber → off). Same clock as the dirty digit and the
+ * Kimi label, so every blink source on row 1 cycles in lockstep.
+ *
+ * Phase → output:
+ *   dim  → cyan bold [wt]      (the familiar look)
+ *   off  → 4 dim spaces        (invisible, column width preserved)
+ *   red  → amber bold [wt]     (#e0a800 — the bar "warning" family)
+ *   off  → 4 dim spaces
+ *
+ * The off-phase renders SPACES so the column width stays stable, and
+ * ANSI \x1b[5m is never used (same reasons as the Kimi label).
+ * Resets with bold-off + fg-off (\x1b[22m\x1b[39m) so the marker
+ * composes cleanly inside formatGitCenter's colored segments.
+ */
+export function formatWorktreeMarker(now: number = Date.now()): string {
+	const phase = pickBlinkPhase(now);
+	if (phase === "dim") return `${CYAN_BOLD}${WT_MARKER}${OFF_ALL}`;
+	if (phase === "red") return `${AMBER_BOLD}${WT_MARKER}${OFF_ALL}`;
+	return `${DIM}${WT_BLANK}${RESET}`;
+}

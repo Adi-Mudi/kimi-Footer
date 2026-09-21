@@ -2,7 +2,81 @@
 
 All notable changes to kimi-quota-line are recorded here. Format follows [keep-a-changelog](https://keepachangelog.com/).
 
-## Unreleased — Footer loading fix (SessionStart + render path)
+## Unreleased — Pace hours printed as hours + minutes
+
+### Changed
+
+- **Pace hours now render as `HhMM`** — `9h55m`, `-0h47m`, `0h00m` — instead of decimal hours (`9.9h`, `-0.8h`). Affects the weekly and 5H pace segment on row 1 in full mode only; compact mode still drops pace entirely.
+- `formatPaceHours(h)` in `src/helpers.ts` converts to whole minutes first, so rounding can never emit a 60-minute field (`1.999` → `2h00m`, not `1h60m`). The near-zero guard is unchanged in spirit: under 3 minutes of pace renders `0h00m`.
+
+### Why
+
+- The reset countdown (`formatRemaining`) prints `H.MM` — hours plus a zero-padded minute field — while pace printed decimal hours. Two different conventions sat side by side on one line and looked identical: `/99.15` meant 99 h 15 m, while `9.9h` meant 9 h 54 m. A `.15` field meant 15 minutes in one place and 9 minutes in the other. `9h55m` cannot be misread.
+
+### Tests
+
+- `formatPaceHours` expectations migrated to `HhMM`; added rounding-carry cases (`1.999` → `2h00m`, `0.9999` → `1h00m`, `-1.999` → `-2h00m`) and the values measured from the live cache (`9.924` → `9h55m`, `-0.7903` → `-0h47m`, `108.7` → `108h42m`).
+- Full-mode pace assertions in `test/render-row1.test.ts` tightened from `/\d+h/` and `/\d+\.\d+h/` to `/\d+h\d{2}m/`.
+- `test/render-row1-width.test.ts` unchanged and still exact-width at 60/80/100/120/150/200/300 columns.
+
+## Unreleased — Blinking [wt] worktree marker
+
+### Added
+
+- **The `[wt]` worktree marker now blinks** (cyan → off → amber → off) so a developer can spot worktree sessions instantly. `formatWorktreeMarker(now)` in `src/label-blink.ts` — pure, no I/O, reuses the shared 4-phase engine (150 ms quarters, 600 ms cycle).
+- Amber phase uses the bar "warning" color `#e0a800` (`\x1b[38;2;224;168;0m` + bold) — consistent with the existing status-color family.
+- Off phase renders 4 spaces (same visible width as `[wt]`) so the layout never shifts; no ANSI `\x1b[5m` (same cross-terminal reasoning as the 1.3.6 decision).
+
+### Changed
+
+- `formatGitCenter` worktree branch: the branch text stays static cyan bold; only the `[wt]` marker blinks, in lockstep with the dirty digit and the Kimi label (shared `pickBlinkPhase` clock).
+
+### Why
+
+- The branch already carries a `[wt]` flag (computed in the background by the `.git` walk-up and cached in the mtime git cache — zero new backend work). A blinking marker is pure presentation, so it lives in the drawer: one pure helper + one line of wiring.
+
+### Tests
+
+- 7 new `formatWorktreeMarker` tests (all 4 phases, cycle-back, width=4 stability, no ANSI blink codes).
+- 6 worktree assertions rewritten for the split-segment shape (static cyan branch + blinking marker), including an all-4-phase width-stability check.
+- `npm run typecheck` clean; `npm test` 232/232; `npm run build` clean; `npm run stress` 5/5 (p99 201 ms).
+
+## (previous) Unreleased — Community-backed git/quota split architecture
+
+### Added
+
+- `src/model-detect.ts` — pure model-name detectors (`isKimiModel` / `isMinimaxModel`), moved verbatim from the fetchers. The render path no longer imports the fetcher modules, which read `auth.json` at module init — so every render previously loaded the API token into memory it never used.
+- `src/git-cache.ts` — mtime-keyed git cache. Validity = same cwd + identical `.git/HEAD`/`.git/index` mtimes + age ≤ `KIMI_GIT_MAX_AGE_MS` (default 2000 ms, `0` = always live). The age check runs at READ time against the CURRENT mtimes, so the v1.3.1 write-time-TTL staleness bug is structurally impossible.
+- New architecture guard tests: `bin/` must not import the fetcher modules; the git cache must carry mtime keys; git-footer must use `--no-optional-locks` and must not spawn `git rev-parse`.
+- New file-lock tests: concurrent winner, unparseable-lock recovery, PID ownership.
+
+### Changed
+
+- **Git branch now comes from kimi-code's stdin snapshot (`gitBranch`)** — the official `tui.toml [status_line]` payload field, always fresh, zero cost. The local porcelain read is only a fallback (payload empty / detached HEAD).
+- **Dirty count + worktree via mtime-keyed cache** (pattern from ccstatusline): staging/commit/branch-switch refresh instantly; plain file edits refresh within ≤2 s (documented blind spot — unstaged edits do not touch `.git/index`). Steady state: ZERO git subprocesses per render.
+- **Worktree detection reads `.git` directly** (dir = main checkout, file = worktree via its `gitdir:` line) instead of spawning `git rev-parse --git-dir` — works from any subdirectory (v1.3.3.1 semantics preserved).
+- **The one remaining git subprocess is bounded**: `git --no-optional-locks status --porcelain=v2 --branch`, 300 ms timeout (kimi-code's whole status-line budget), silent degrade. `--no-optional-locks` (ccstatusline's fix) prevents racing the user's own git commands for `index.lock`.
+- **Atomic cache writes** — both quota and git caches are written tmp-file + `rename`, so overlapping writers can never leave torn JSON on the render path.
+- **Race-free file lock** — `withFileLock` acquires via exclusive-create (`flag: "wx"`) with a single stale-steal retry, eliminating the read-then-write TOCTOU window.
+
+### Fixed
+
+- Render path no longer reads `auth.json` or holds the API token in memory (previously pulled in transitively via `isKimiModel` from the fetcher module).
+- Render stress p99 improved 208 ms → 193 ms (mtime cache replaces the always-live subprocess in the steady state).
+
+### Why
+
+- The git and quota layers share one render process (a kimi-code platform constraint: one `[status_line].command` for the whole line). Every historical breakage (v1.2.0 wrong-branch, v1.3.0/v1.3.1 stale git, v1.3.3 quota-failure-erases-git, the 30 s startup block) came from the shared runtime, not shared data. This change gives each side its own data source — branch from the platform payload, quota from the heartbeat cache, dirty count from the filesystem's own signals — with the render as the single meeting point. Patterns adopted from the two largest community status lines (ccstatusline: mtime cache, `--no-optional-locks`, self-healing locks; claude-code-statusline-progress: host-gated git, bounded timeouts, silent degrade).
+
+### Tests
+
+- `npm run typecheck` clean.
+- `npm test` — 225/225 pass.
+- `npm run build` — clean.
+- `npm run stress` — 5/5 pass; render p99 = 193.0 ms (was 208.1 ms).
+- `npm run e2e` — see verification below.
+
+## (previous) Unreleased — Footer loading fix (SessionStart + render path)
 
 ### Fixed
 

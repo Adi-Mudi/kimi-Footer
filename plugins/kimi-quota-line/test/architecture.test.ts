@@ -61,6 +61,15 @@ describe("architecture layer rules", () => {
 			expect(src).not.toMatch(/from\s+["']node:child_process/);
 			expect(src).not.toMatch(/from\s+["']child_process/);
 		});
+
+		it("does not import the fetcher modules at all", () => {
+			// The fetcher modules read auth.json at module init (getKimiToken()
+			// / getMinimaxToken()). Even importing a "pure" function from them
+			// pulls the credential read into the render process. Model-name
+			// detection comes from the pure model-detect.ts module instead.
+			expect(src).not.toMatch(/kimi-fetcher/);
+			expect(src).not.toMatch(/minimax-fetcher/);
+		});
 	});
 
 	describe("src/quota-cache.ts (quota module isolation)", () => {
@@ -82,19 +91,24 @@ describe("architecture layer rules", () => {
 	describe("src/git-footer.ts (git module isolation)", () => {
 		const src = readSrc("git-footer.ts");
 
-		it("does not import the cache module (git is live, not cached)", () => {
-			// v1.3.1: git-footer must not depend on git-cache.ts (which
-			// was deleted). It also must not depend on file-lock.ts — git
-			// is now lock-free on the render path.
-			expect(src).not.toMatch(/from\s+["']\.\/git-cache/);
-			expect(src).not.toMatch(/from\s+["']\.\.\/src\/git-cache/);
+		it("imports only its own mtime cache — never the quota cache or file-lock", () => {
+			expect(src).not.toMatch(/from\s+["']\.\/quota-cache/);
 			expect(src).not.toMatch(/from\s+["']\.\/file-lock/);
+			expect(src).not.toMatch(/from\s+["']\.\.\/src\/quota-cache/);
 			expect(src).not.toMatch(/from\s+["']\.\.\/src\/file-lock/);
 		});
 
-		it("does not import the cache or quota modules", () => {
-			expect(src).not.toMatch(/from\s+["']\.\/quota-cache/);
-			expect(src).not.toMatch(/from\s+["']\.\/cache/);
+		it("passes --no-optional-locks so status checks never fight index.lock", () => {
+			// ccstatusline's fix: background status checks must never race
+			// the user's own git commands for .git/index.lock.
+			expect(src).toContain("--no-optional-locks");
+		});
+
+		it("no longer spawns git rev-parse (worktree detection reads .git directly)", () => {
+			// Strip comments first — the header documents the design and may
+			// mention the old command; only CODE may not contain it.
+			const stripped = src.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+			expect(stripped).not.toContain("rev-parse");
 		});
 	});
 
@@ -104,12 +118,19 @@ describe("architecture layer rules", () => {
 		});
 	});
 
-	describe("src/git-cache.ts (deleted in v1.3.1)", () => {
-		it("does not exist (git data is live, not cached)", () => {
-			// v1.3.1 removed src/git-cache.ts. If this fails, someone has
-			// re-added the disk cache for git — update the assertion but
-			// remember the cache was the source of the staleness bug.
-			expect(existsSync(join(SRC, "git-cache.ts"))).toBe(false);
+	describe("src/git-cache.ts (mtime-keyed — the v1.3.1 TTL bug must never return)", () => {
+		it("exists and is keyed on git internals' mtimes", () => {
+			// Re-introduced by the community-architecture change: git data is
+			// cached, but ONLY with mtime keys + read-time age checks. A
+			// TTL-only cache (write-time freshness) is the v1.3.1 bug.
+			const src = readSrc("git-cache.ts");
+			expect(src).toContain("headMtimeMs");
+			expect(src).toContain("indexMtimeMs");
+		});
+
+		it("writes atomically via tmp + renameSync", () => {
+			const src = readSrc("git-cache.ts");
+			expect(src).toContain("renameSync");
 		});
 	});
 
@@ -170,6 +191,21 @@ describe("architecture layer rules", () => {
 		});
 		it("does not import node:child_process", () => {
 			expect(src).not.toMatch(/from\s+["']node:child_process/);
+		});
+	});
+
+	describe("src/model-detect.ts (pure model detectors)", () => {
+		const src = readSrc("model-detect.ts");
+
+		it("does not import node:fs", () => {
+			expect(src).not.toMatch(/from\s+["']node:fs/);
+		});
+		it("does not import node:child_process", () => {
+			expect(src).not.toMatch(/from\s+["']node:child_process/);
+		});
+		it("does not call fetch", () => {
+			const stripped = src.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+			expect(stripped).not.toMatch(/\bfetch\s*\(/);
 		});
 	});
 });

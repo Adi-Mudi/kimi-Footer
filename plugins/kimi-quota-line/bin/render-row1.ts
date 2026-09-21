@@ -10,7 +10,7 @@
  * available. Pure buildRow1 is exported so test/ can import it directly.
  */
 import { pathToFileURL } from "node:url";
-import { buildGitDetails, getCurrentBranch, getGitDetails } from "../src/git-footer.js";
+import { getGitDetails } from "../src/git-footer.js";
 import {
 	formatPaceHours,
 	formatRemaining,
@@ -22,9 +22,8 @@ import {
 	weeklyPaceColor,
 	weeklyPaceHours,
 } from "../src/helpers.js";
-import { isKimiModel } from "../src/kimi-fetcher.js";
-import { formatKimiLabel, pickBlinkPhase } from "../src/label-blink.js";
-import { isMinimaxModel } from "../src/minimax-fetcher.js";
+import { formatKimiLabel, formatWorktreeMarker, pickBlinkPhase } from "../src/label-blink.js";
+import { isKimiModel, isMinimaxModel } from "../src/model-detect.js";
 import { readQuotaCache } from "../src/quota-cache.js";
 import { styledCwd } from "../src/sunset-dir.js";
 import type { GitInfo, QuotaCache, QuotaData, StatusLinePayload } from "../src/types.js";
@@ -91,8 +90,8 @@ export function visibleWidth(s: string): number {
  * Mirrors pi-footer's buildQuotaStatus() byte-for-byte.
  *
  * When `compact` is true (used on narrow terminals), drops the pace hours
- * (`112.5h`) and the reset countdown (`/5.06`) so the right column fits in
- * ~33 chars instead of ~57 — leaves room for the git center on 80-col
+ * (`9h55m`) and the reset countdown (`/5.06`) so the right column fits in
+ * ~33 chars instead of ~59 — leaves room for the git center on 80-col
  * terminals. Bars and percentages are preserved (the most important info).
  */
 export function buildQuotaStatus(
@@ -131,7 +130,7 @@ export function buildQuotaStatus(
 	const labelStr = label === "Kimi " ? formatKimiLabel(model, now) : dim(label);
 
 	if (compact) {
-		// Drop pace hours (e.g. "112.5h ") and reset countdowns (e.g. "/5.06").
+		// Drop pace hours (e.g. "9h55m ") and reset countdowns (e.g. "/5.06").
 		// Keep label + weekly bar + pct/limit + "5H:" + 5H bar + pct/limit
 		// so the user can see both bars on narrow terminals. Format:
 		// "MM ▮▮▮▯▯▯▯▯▯▯ 31%/100  5H: ▮▮▮▯▯▯▯▯▯▯ 25%/50" — ~44 chars vs ~57 in full mode.
@@ -188,7 +187,8 @@ function formatDirtyCount(n: number, now: number = Date.now()): string {
  * Format the git details for line 1's center column.
  *
  * Shape (preserved from 1.3.3):
- *   - Worktree branch: cyan bold + " [wt]"
+ *   - Worktree branch: cyan bold, then a blinking [wt] marker
+ *     (cyan → off → amber → off, same 4-phase clock as the digit)
  *   - Non-worktree branch: dim
  *   - Dirty count: digit blinks red ↔ dim; the word " files" stays static dim
  *   - Separator " • ": dim
@@ -204,7 +204,9 @@ export function formatGitCenter(git: GitInfo | null, now: number = Date.now()): 
 	}
 
 	if (git.isWorktree) {
-		const head = `\x1b[96m\x1b[1m${git.branch} [wt]\x1b[22m\x1b[39m`;
+		// Branch stays static cyan bold; only the [wt] marker blinks
+		// (cyan → off → amber → off, shared 4-phase clock).
+		const head = `\x1b[96m\x1b[1m${git.branch}\x1b[22m\x1b[39m ${formatWorktreeMarker(now)}`;
 		if (git.count > 0) {
 			return `${head} \x1b[2m\u2022\x1b[22m ${formatDirtyCount(git.count, now)}`;
 		}
@@ -239,7 +241,7 @@ export function buildRow1(
 	now: number = Date.now(),
 ): string {
 	const left = styledCwd(payload.cwd || "/");
-	const gitInfo = git !== undefined ? git : (buildGitDetails(getCurrentBranch) ?? null);
+	const gitInfo = git !== undefined ? git : (getGitDetails(payload.gitBranch || null) ?? null);
 	const center = formatGitCenter(gitInfo, now);
 
 	// Git center is independent of quota. When quota is unavailable,
@@ -311,11 +313,6 @@ async function main(): Promise<void> {
 	// lock on the read path saves 5-15 ms of syscalls per render.
 	const quotaCache: QuotaCache | null = readQuotaCache();
 
-	// Git details are LIVE on every render — no caching. Kimi-code already
-	// throttles the status line to once per second, so there is no benefit
-	// to caching. See src/git-footer.ts.
-	const git: GitInfo | null = getGitDetails(getCurrentBranch) ?? null;
-
 	const payload: StatusLinePayload = {
 		model: partial.model ?? "",
 		cwd: partial.cwd ?? process.cwd(),
@@ -328,6 +325,12 @@ async function main(): Promise<void> {
 		sessionId: partial.sessionId ?? "",
 		version: partial.version ?? "",
 	};
+
+	// Git: branch comes from kimi-code's official stdin snapshot field
+	// `gitBranch` (always fresh, zero cost). Worktree + dirty count come
+	// from the mtime-keyed cache via getGitDetails — one bounded
+	// `--no-optional-locks` subprocess only when the repo internals changed.
+	const git: GitInfo | null = getGitDetails(payload.gitBranch || null) ?? null;
 
 	const line = buildRow1(payload, quotaCache, width, git);
 	process.stdout.write(line);

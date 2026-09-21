@@ -60,17 +60,10 @@ function getResetAt(data: Record<string, unknown> | undefined): string | undefin
 	return undefined;
 }
 
-/**
- * True when the given model id or name identifies a Kimi model.
- * Accepts a plain string (kimi-code StatusLinePayload.model).
- */
-export function isKimiModel(modelIdOrName?: string): boolean {
-	const id = (modelIdOrName ?? "").toString().toLowerCase();
-	if (id.includes("kimi")) return true;
-	// Kimi family aliases: k3, k3-256k, k2, k1.5 etc.
-	// kimi-code sends bare ids like "k3-256k" when no provider prefix is present.
-	return /^k\d/.test(id);
-}
+// Model detection moved verbatim to src/model-detect.ts so bin/render-row1.ts
+// never loads this module (which reads auth.json at init). Re-exported for
+// backwards compatibility with hooks + existing tests.
+export { isKimiModel } from "./model-detect.js";
 
 /**
  * Fetches Kimi usage and caches it. Never throws.

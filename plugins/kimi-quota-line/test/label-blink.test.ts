@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BLINK_QUARTER_PERIOD_MS, formatKimiLabel, pickBlinkPhase } from "../src/label-blink.js";
+import { BLINK_QUARTER_PERIOD_MS, formatKimiLabel, formatWorktreeMarker, pickBlinkPhase } from "../src/label-blink.js";
 
 describe("BLINK_QUARTER_PERIOD_MS", () => {
 	it("is 150 ms (4 phases × 150 ms = 600 ms full cycle)", () => {
@@ -215,5 +215,47 @@ describe("formatKimiLabel phase boundaries", () => {
 
 	it("emits 5 spaces at now = BLINK_QUARTER_PERIOD_MS * 3 (off phase 3 starts)", () => {
 		expect(formatKimiLabel("kimi-for-coding", BLINK_QUARTER_PERIOD_MS * 3)).toBe("\x1b[38;5;244m     \x1b[0m");
+	});
+});
+
+describe("formatWorktreeMarker", () => {
+	const Q = BLINK_QUARTER_PERIOD_MS;
+
+	function strip(s: string): string {
+		return s.replace(/\x1b\[[0-9;]*m/g, "");
+	}
+
+	it("emits cyan bold [wt] at now = 0 (dim phase)", () => {
+		expect(formatWorktreeMarker(0)).toBe("\x1b[96m\x1b[1m[wt]\x1b[22m\x1b[39m");
+	});
+
+	it("emits 4 spaces at now = Q (off phase 1)", () => {
+		expect(formatWorktreeMarker(Q)).toBe("\x1b[38;5;244m    \x1b[0m");
+	});
+
+	it("emits amber bold [wt] at now = Q * 2 (attention phase)", () => {
+		expect(formatWorktreeMarker(Q * 2)).toBe("\x1b[38;2;224;168;0m\x1b[1m[wt]\x1b[22m\x1b[39m");
+	});
+
+	it("emits 4 spaces at now = Q * 3 (off phase 2)", () => {
+		expect(formatWorktreeMarker(Q * 3)).toBe("\x1b[38;5;244m    \x1b[0m");
+	});
+
+	it("cycles back: now = Q * 4 equals now = 0", () => {
+		expect(formatWorktreeMarker(Q * 4)).toBe(formatWorktreeMarker(0));
+	});
+
+	it("keeps visible width at exactly 4 in every phase", () => {
+		const phases = [0, Q, Q * 2, Q * 3];
+		for (const now of phases) {
+			expect(strip(formatWorktreeMarker(now))).toHaveLength(4);
+		}
+	});
+
+	it("never uses ANSI slow blink codes", () => {
+		for (const now of [0, Q, Q * 2, Q * 3]) {
+			expect(formatWorktreeMarker(now)).not.toContain("\x1b[5m");
+			expect(formatWorktreeMarker(now)).not.toContain("\x1b[25m");
+		}
 	});
 });

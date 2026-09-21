@@ -11,10 +11,12 @@ A Kimi Code CLI status-line plugin that replaces the first footer line with a su
 
 Three columns on the first row:
 - **Left**: sunset-gradient folder (`›› <folder>`)
-- **Center**: git details — branch in cyan bold (with `[wt]` in worktrees), dim ` • ` separator, bright-red dirty count (`N files`) or `clean`
+- **Center**: git details — branch in cyan bold, `[wt]` marker in worktrees **blinking** cyan → off → amber (shared 4-phase clock), dim ` • ` separator, bright-red blinking dirty count (`N files`) or `clean`
 - **Right**: Kimi or MiniMax quota bars (weekly + 5H)
 
 The bottom row is kimi-code's built-in (context %, session id, version). **kimi-quota-line only replaces the top row.**
+
+Reading the right column: `9h55m` is the **pace** (hours + minutes of slack, debt when negative), `/99.15` is the **reset countdown** in `H.MM` (99 h 15 m), and the `X%/Y` pairs in compact mode are **percent/limit**. Full mode shows the countdown after the `/` instead of the limit.
 
 ## What it is, and what it is not
 
@@ -134,9 +136,10 @@ If a provider's key is missing, that provider's bar is hidden — no error, no c
 ## How it works
 
 1. `SessionStart` and `SessionHeartbeat` (every 60 s) hooks fire `dist/hooks/refresh-cache.js`.
-2. `refresh-cache.js` calls the Kimi and MiniMax APIs in parallel (each provider is failure-tolerant) and writes a JSON cache to `$XDG_RUNTIME_DIR/kimi-quota-line-cache.json` (fallback `/tmp/kimi-quota-line-cache.json`).
+2. `refresh-cache.js` calls the Kimi and MiniMax APIs in parallel (each provider is failure-tolerant) and writes a JSON cache to `$XDG_RUNTIME_DIR/kimi-quota-line-quota-cache.json` (fallback `/tmp/...`).
 3. kimi-code renders the footer every second (the `[status_line]` throttle). It calls `dist/bin/render-row1.js` with the current `StatusLinePayload` on stdin and `KIMI_CODE_STATUS_LINE=1` in env.
-4. `render-row1.js` reads the cache + stdin payload, renders pi-footer's row 1 verbatim, and prints one line to stdout.
+4. `render-row1.js` reads the cache + stdin payload, renders pi-footer's row 1 verbatim, and prints one line to stdout. The **branch comes from the payload's `gitBranch` field** (official stdin snapshot — always fresh, zero cost).
+5. **Dirty count + worktree flag** come from an mtime-keyed disk cache (`$XDG_RUNTIME_DIR/kimi-quota-line-git-cache.json`): staging, committing, and branch switches touch `.git/HEAD`/`.git/index` and refresh instantly; plain file edits (which do not touch them) refresh within ≤2 s (tunable via `KIMI_GIT_MAX_AGE_MS`, `0` = always live). ONE bounded `git --no-optional-locks status` subprocess runs only when the cache is invalid — zero subprocesses in the steady state.
 
 The status-line script is capped at **300 ms** by kimi-code. The script only reads a JSON file and does string ops — well under that budget. Live API calls happen in the hook path, not the render path.
 
@@ -200,12 +203,25 @@ For first-time install or a major change, use `/plugins install` (the official p
 
 For automatic sync on every save, you can wire up a file watcher (e.g. `fswatch -o . | xargs -n1 -I{} npm run sync`); this is left as a user choice and not bundled to keep dependencies minimal.
 
+## Git data flow (community-backed design)
+
+The git/quota split follows the patterns proven by the two largest community status lines (ccstatusline, claude-code-statusline-progress):
+
+| Data | Source | Freshness | Cost at render |
+| --- | --- | --- | --- |
+| Branch | kimi-code stdin `gitBranch` | always | zero |
+| Dirty count + worktree | mtime-keyed disk cache; one `git --no-optional-locks status --porcelain=v2 --branch` (300 ms cap) on miss | instant on staging/commit/branch-switch; ≤ `KIMI_GIT_MAX_AGE_MS` (default 2000 ms) for plain edits | 2 stat calls (near zero) |
+| Quota bars | quota cache written by the 60 s heartbeat hook | ≤ 60 s | one small JSON read |
+
+The mtime keys make the old v1.3.1 TTL-staleness bug structurally impossible: validity is checked at read time against the CURRENT mtimes, never against a write-time "fresh enough" flag.
+
 ## Limitations
 
 - **Row 2 is fixed** — kimi-code's built-in layout (context %, session id, version). Replacing both rows is not currently possible via `[status_line].command`. Tracked in [kimi-code issue #2713](https://github.com/MoonshotAI/kimi-code/issues/2713).
 - **`thinkingEffort` switch lags one request** — `/effort` in-session, the status line shows the previous effort until the next request lands. Tracked upstream.
 - **Fixed dim color** — pi-footer's `theme.fg("dim", ...)` resolves to the active theme's dim token. This port emits a fixed ANSI gray (`\x1b[38;5;244m`) because the status-line script has no access to kimi-code's theme at runtime. Bar colors (`#28a745` / `#e0a800` / `#dc3545`) are unchanged.
 - **1-second status-line throttle** is kimi-code's, not ours. The cache can be fresher than the footer.
+- **Dirty-count blind spot** — plain (unstaged, untracked) file edits do not touch `.git/index`, so the count can be up to `KIMI_GIT_MAX_AGE_MS` old (default 2000 ms). Set `KIMI_GIT_MAX_AGE_MS=0` for always-live behavior (one subprocess per render).
 
 ## Development
 

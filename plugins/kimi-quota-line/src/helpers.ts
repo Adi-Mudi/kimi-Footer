@@ -111,11 +111,18 @@ function paceHours(
 }
 
 /**
- * Formats pace hours. Near-zero collapses to 0 (no -0.0h artifact).
+ * Formats pace as hours + minutes (`9h55m`, `-0h47m`, `0h00m`).
+ *
+ * Whole minutes are derived first, so rounding can never emit a 60-minute
+ * field (`1.999` → `2h00m`, never `1h60m`). Near-zero (under 3 minutes of
+ * pace) collapses to `0h00m`, so no `-0h00m` artifact can be printed.
  */
 export function formatPaceHours(h: number): string {
-	const v = Math.abs(h) < 0.05 ? 0 : h;
-	return `${v.toFixed(1)}h`;
+	const totalMin = Math.abs(h) < 0.05 ? 0 : Math.round(Math.abs(h) * 60);
+	const hh = Math.floor(totalMin / 60);
+	const mm = totalMin % 60;
+	const sign = h < 0 && totalMin > 0 ? "-" : "";
+	return `${sign}${hh}h${String(mm).padStart(2, "0")}m`;
 }
 
 /**

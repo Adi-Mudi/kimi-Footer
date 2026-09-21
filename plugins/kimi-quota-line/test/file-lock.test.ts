@@ -10,10 +10,10 @@
  *   6. stale lock (PID dead OR older than staleMs) is stolen.
  */
 
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { withFileLock } from "../src/file-lock.js";
 
 let tmpDir: string;
@@ -125,5 +125,44 @@ describe("withFileLock", () => {
 		const result = await withFileLock(nestedLock, async () => 42);
 		expect(result).toBe(42);
 		expect(existsSync(nestedLock)).toBe(false); // released
+	});
+
+	it("concurrent callers: exactly one wins while the first is in-flight", async () => {
+		// Pins the exclusive-create ("wx") guarantee: no read-then-write
+		// window where two processes could both "acquire".
+		let releaseFirst: (() => void) | undefined;
+		const first = withFileLock(lockPath, async () => {
+			await new Promise<void>((resolve) => {
+				releaseFirst = resolve;
+			});
+			return "first";
+		});
+
+		// Wait until the first caller actually holds the lock file.
+		await vi.waitFor(() => expect(existsSync(lockPath)).toBe(true));
+
+		const second = await withFileLock(lockPath, async () => "second");
+		expect(second).toBeNull(); // live lock held → no acquisition, fn NOT run
+
+		releaseFirst?.();
+		await expect(first).resolves.toBe("first");
+		expect(existsSync(lockPath)).toBe(false); // released after first finishes
+	});
+
+	it("unparseable lock file is treated as stale and replaced", async () => {
+		// A torn/foreign lock must not deadlock the plugin forever.
+		writeFileSync(lockPath, "not json at all");
+		const result = await withFileLock(lockPath, async () => "recovered");
+		expect(result).toBe("recovered");
+		expect(existsSync(lockPath)).toBe(false);
+	});
+
+	it("lock file contains the owning PID while held", async () => {
+		let observed: string | undefined;
+		await withFileLock(lockPath, async () => {
+			observed = readFileSync(lockPath, "utf-8");
+		});
+		const parsed = JSON.parse(observed ?? "{}") as { pid?: number };
+		expect(parsed.pid).toBe(process.pid);
 	});
 });

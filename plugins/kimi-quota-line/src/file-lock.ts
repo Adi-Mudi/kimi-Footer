@@ -7,10 +7,13 @@
  * project-wide lock: non-blocking, stale-aware.
  *
  * Semantics:
+ *   - Acquisition is an exclusive-create write (`flag: "wx"`) — the OS
+ *     guarantees only ONE process wins, so there is no read-then-write
+ *     TOCTOU race (the pre-"wx" implementation had one).
  *   - `withFileLock(lockPath, fn, { staleMs })` returns null immediately if
  *     another live process holds the lock.
  *   - If the lock is stale (PID dead OR older than `staleMs`, default 30 s),
- *     it is stolen.
+ *     it is stolen and the exclusive create is retried exactly once.
  *   - The lock is released in `finally` after `fn` resolves or rejects.
  *
  * Not used for readers-vs-writers coordination (we use a single exclusive
@@ -55,9 +58,13 @@ function isLockStale(lock: LockContent, staleMs: number): boolean {
 	return false;
 }
 
-function writeLock(lockPath: string, lock: LockContent): boolean {
+/**
+ * Exclusive-create the lock file. Returns false when it already exists —
+ * the OS-level atomicity is what makes this race-free, not the JSON.
+ */
+function tryCreateLock(lockPath: string, owned: LockContent): boolean {
 	try {
-		writeFileSync(lockPath, JSON.stringify(lock));
+		writeFileSync(lockPath, JSON.stringify(owned), { flag: "wx" });
 		return true;
 	} catch {
 		return false;
@@ -93,18 +100,30 @@ export async function withFileLock<T>(
 		mkdirSync(lockDir, { recursive: true });
 	}
 
-	const existing = readLock(lockPath);
-	if (existing && !isLockStale(existing, staleMs)) {
-		return null;
-	}
-
 	const owned: LockContent = {
 		pid: process.pid,
 		host: hostname(),
 		acquiredAt: Date.now(),
 	};
-	if (!writeLock(lockPath, owned)) {
-		return null;
+
+	// Fast path: the lock is free and we win the exclusive create outright.
+	if (!tryCreateLock(lockPath, owned)) {
+		// Lock file exists — live holder or stale?
+		const existing = readLock(lockPath);
+		if (existing && !isLockStale(existing, staleMs)) {
+			return null; // another live process holds it
+		}
+		// Stale (dead PID, expired age, or unparseable): steal it and retry
+		// the exclusive create exactly once. Losing that retry means another
+		// process stole it first — their problem now.
+		try {
+			unlinkSync(lockPath);
+		} catch {
+			// already gone
+		}
+		if (!tryCreateLock(lockPath, owned)) {
+			return null;
+		}
 	}
 
 	try {

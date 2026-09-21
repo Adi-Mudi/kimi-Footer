@@ -87,16 +87,19 @@ function makeRepoWithCommit(branch = "main"): { tmpDir: string; originalCwd: str
 	return { tmpDir, originalCwd };
 }
 
-describe("getGitDetails (live, no caching) — the v1.3.1 fix", () => {
+describe("getGitDetails (live mode, maxAge=0) — the v1.3.1 fix, configurable", () => {
 	let tmpDir: string;
 	let originalCwd: string;
 
 	beforeEach(() => {
 		({ tmpDir, originalCwd } = makeRepoWithCommit());
+		// maxAge 0 = always live. These tests pin the LIVE behavior.
+		process.env.KIMI_GIT_MAX_AGE_MS = "0";
 	});
 
 	afterEach(() => {
 		process.chdir(originalCwd);
+		delete process.env.KIMI_GIT_MAX_AGE_MS;
 		rmSync(tmpDir, { recursive: true, force: true });
 	});
 
@@ -119,8 +122,11 @@ describe("getGitDetails (live, no caching) — the v1.3.1 fix", () => {
 		expect(c2).toBe(1);
 	});
 
-	it("regression: caching is GONE — second call after a change reflects it", async () => {
-		// This test fails if anyone re-introduces an in-memory TTL.
+	it("regression: with maxAge=0 every call is live (no TTL may hide changes)", async () => {
+		// This test fails if a time-based TTL is re-introduced. maxAge=0 is
+		// the documented always-live mode; these changes are unstaged
+		// edits that .git/index mtime cannot see, so only live mode
+		// catches them immediately.
 		const { getGitDetails } = await import("../src/git-footer.js");
 		writeFileSync(join(tmpDir, "a.txt"), "x");
 		expect(getGitDetails()?.count).toBe(1);
@@ -139,15 +145,20 @@ describe("getGitDetails (live, no caching) — the v1.3.1 fix", () => {
 		expect(getGitDetails()?.count).toBe(0);
 	});
 
-	it("stale disk-cache file (if any leftover from v1.3.0) is IGNORED", async () => {
-		// Pre-write a stale git cache with deliberately wrong count and branch.
+	it("stale git-cache with wrong mtimes is IGNORED (mtime is the guard)", async () => {
+		// Pre-write a git-cache entry with deliberately wrong mtimes + data.
 		const cacheDir = process.env.XDG_RUNTIME_DIR || "/tmp";
 		const cachePath = join(cacheDir, "kimi-quota-line-git-cache.json");
 		writeFileSync(
 			cachePath,
 			JSON.stringify({
-				ts: Date.now() - 600_000,
-				info: { branch: "fake-branch", count: 999, text: "fake • 999 files", isWorktree: false },
+				cwd: tmpDir,
+				headMtimeMs: 111_111_111,
+				indexMtimeMs: 111_111_111,
+				capturedAt: Date.now(),
+				branch: "fake-branch",
+				isWorktree: false,
+				count: 999,
 			}),
 		);
 		try {
@@ -155,13 +166,67 @@ describe("getGitDetails (live, no caching) — the v1.3.1 fix", () => {
 			writeFileSync(join(tmpDir, "a.txt"), "x");
 			const { getGitDetails } = await import("../src/git-footer.js");
 			const r = getGitDetails();
-			// Live git, not the stale cache.
+			// mtime mismatch → cache invalid → live git.
 			expect(r?.count).toBe(1);
 			expect(r?.branch).not.toBe("fake-branch");
 		} finally {
-			// Clean up the leftover cache so other tests are not affected.
+			// Clean up so other tests are not affected.
 			rmSync(cachePath, { force: true });
 		}
+	});
+});
+
+describe("getGitDetails (default maxAge — mtime invalidation)", () => {
+	let tmpDir: string;
+	let originalCwd: string;
+
+	beforeEach(() => {
+		delete process.env.KIMI_GIT_MAX_AGE_MS; // default 2000 ms
+		({ tmpDir, originalCwd } = makeRepoWithCommit());
+	});
+
+	afterEach(() => {
+		process.chdir(originalCwd);
+		delete process.env.KIMI_GIT_MAX_AGE_MS;
+		rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	it("staged change invalidates instantly via index mtime", async () => {
+		const { getGitDetails } = await import("../src/git-footer.js");
+		expect(getGitDetails()?.count).toBe(0); // miss → live → cache written
+		writeFileSync(join(tmpDir, "new.txt"), "new");
+		spawnSync("git", ["-C", tmpDir, "add", "new.txt"]); // touches .git/index
+		expect(getGitDetails()?.count).toBe(1); // mtime mismatch → live
+	});
+
+	it("commit invalidates instantly via HEAD + index mtime", async () => {
+		const { getGitDetails } = await import("../src/git-footer.js");
+		writeFileSync(join(tmpDir, "a.txt"), "x");
+		expect(getGitDetails()?.count).toBe(1); // cache written (count 1)
+		spawnSync("git", ["-C", tmpDir, "add", "."]);
+		spawnSync("git", ["-C", tmpDir, "commit", "-m", "w"], { stdio: "ignore" });
+		expect(getGitDetails()?.count).toBe(0); // HEAD+index changed → live
+	});
+
+	it("unstaged edit within maxAge serves the cached count (documented blind spot)", async () => {
+		process.env.KIMI_GIT_MAX_AGE_MS = "60000"; // deterministic window
+		const { getGitDetails } = await import("../src/git-footer.js");
+		expect(getGitDetails()?.count).toBe(0); // miss → live → cache written
+		// Plain file edits do NOT touch .git/index mtime, so within the
+		// maxAge window the cached count is served. This is the documented
+		// ≤maxAge staleness trade-off (ccstatusline ships the same).
+		writeFileSync(join(tmpDir, "a.txt"), "x");
+		expect(getGitDetails()?.count).toBe(0); // cached, no subprocess
+	});
+
+	it("same edit is fresh once maxAge is set to 0 (always-live mode)", async () => {
+		process.env.KIMI_GIT_MAX_AGE_MS = "60000";
+		const { getGitDetails } = await import("../src/git-footer.js");
+		expect(getGitDetails()?.count).toBe(0);
+		writeFileSync(join(tmpDir, "a.txt"), "x");
+		expect(getGitDetails()?.count).toBe(0); // cached within window
+		process.env.KIMI_GIT_MAX_AGE_MS = "0"; // always live
+		expect(getGitDetails()?.count).toBe(1); // fresh
 	});
 });
 

@@ -8,7 +8,7 @@
  * Paths are computed lazily (on each call) so a runtime change to
  * $XDG_RUNTIME_DIR (e.g. tests setting a tmp dir) takes effect immediately.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { QuotaCache } from "./types.js";
 
@@ -39,7 +39,25 @@ export function readQuotaCache(): QuotaCache | null {
 	}
 }
 
-/** Writes the quota cache. Throws on I/O failure (caller decides what to do). */
+/**
+ * Writes the quota cache atomically: tmp file first, then rename over
+ * the target. Readers see either the complete old file or the complete
+ * new file — never a torn one (two overlapping writers could previously
+ * interleave mid-write; the lock narrows but cannot fully prevent that).
+ * Throws on I/O failure (caller decides what to do).
+ */
 export function writeQuotaCache(data: QuotaCache): void {
-	writeFileSync(quotaCachePath(), JSON.stringify(data));
+	const target = quotaCachePath();
+	const tmp = `${target}.tmp-${process.pid}`;
+	try {
+		writeFileSync(tmp, JSON.stringify(data));
+		renameSync(tmp, target);
+	} catch (e) {
+		try {
+			unlinkSync(tmp);
+		} catch {
+			// temp may not exist if the write never started — best effort
+		}
+		throw e;
+	}
 }

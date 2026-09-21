@@ -141,11 +141,13 @@ describe("buildRow1 with git center column", () => {
 		expect(line).toMatch(/\x1b\[91m3\x1b\[0m/);
 	});
 
-	it("uses cyan bold ANSI for worktree branch with [wt] marker", () => {
+	it("uses cyan bold ANSI for worktree branch with blinking [wt] marker", () => {
 		const wtGit: GitInfo = { ...dirtyGit, isWorktree: true };
 		const line = buildRow1(makePayload("kimi-for-coding", "/tmp"), kimiCache(), wideTerminal, wtGit, 0);
-		expect(line).toContain("main [wt]");
-		expect(line).toMatch(/\x1b\[96m\x1b\[1mmain \[wt\]\x1b\[22m\x1b\[39m/);
+		// Branch is its own static cyan bold segment; [wt] is a separate
+		// blinking marker segment after it (now=0 → dim phase → visible).
+		expect(line).toMatch(/\x1b\[96m\x1b\[1mmain\x1b\[22m\x1b\[39m /);
+		expect(line).toContain("[wt]");
 	});
 
 	it("uses bright red ANSI for dirty digit on the red phase", () => {
@@ -187,7 +189,8 @@ describe("buildRow1 with git center column", () => {
 		const cleanWt: GitInfo = { branch: "feat-x", count: 0, text: "", isWorktree: true };
 		const line = buildRow1(makePayload("kimi-for-coding", "/tmp"), kimiCache(), wideTerminal, cleanWt, 0);
 		expect(line).toContain("clean");
-		expect(line).toContain("feat-x [wt]");
+		// now=0 → dim phase → the blinking [wt] marker is visible.
+		expect(line).toContain("[wt]");
 	});
 
 	it("drops the center column when terminal is narrow", () => {
@@ -327,19 +330,23 @@ describe("formatGitCenter", () => {
 		);
 	});
 
-	it("renders dirty worktree with cyan bold + dirty count", () => {
-		// 1.3.6: red phase is now at quarter-period × 2.
+	it("renders dirty worktree with cyan bold + blinking [wt] + dirty count", () => {
+		// 1.3.6: red phase is now at quarter-period × 2 — which is also the
+		// marker's amber phase (shared clock).
 		const result = formatGitCenter({ branch: "main", count: 5, text: "", isWorktree: true }, BLINK_QUARTER_PERIOD_MS * 2);
-		expect(result).toContain("main [wt]");
+		// Branch is static cyan bold (no [wt] inside the cyan segment).
+		expect(result).toMatch(/\x1b\[96m\x1b\[1mmain\x1b\[22m\x1b\[39m /);
+		// Marker is in its amber phase at 2×Q.
+		expect(result).toContain("\x1b[38;2;224;168;0m\x1b[1m[wt]\x1b[22m\x1b[39m");
 		expect(strip(result)).toContain("5 files");
-		expect(result).toMatch(/\x1b\[96m\x1b\[1mmain \[wt\]/);
 		// Dirty digit uses bright red (no bold, no ANSI blink in 1.3.6)
 		expect(result).toMatch(/\x1b\[91m5\x1b\[0m/);
 	});
 
-	it("renders clean worktree with cyan bold + dim 'clean'", () => {
+	it("renders clean worktree with cyan bold + blinking [wt] + dim 'clean'", () => {
 		const result = formatGitCenter({ branch: "feat-x", count: 0, text: "", isWorktree: true }, 0);
-		expect(result).toContain("feat-x [wt]");
+		// now=0 → dim phase → [wt] visible in cyan.
+		expect(result).toContain("[wt]");
 		expect(result).toContain("clean");
 		expect(result).toMatch(/\x1b\[96m\x1b\[1m/);
 		expect(result).not.toMatch(/\x1b\[91m/); // no red for clean
@@ -467,8 +474,8 @@ describe("buildQuotaStatus compact mode", () => {
 		const full = buildQuotaStatus("minimax-text-01", cache(), false);
 		expect(full).toBeDefined();
 		const visible = full?.replace(/\x1b\[[0-9;]*m/g, "");
-		// Pace hours pattern: digit(s) followed by "h"
-		expect(visible).toMatch(/\d+h/);
+		// Pace pattern: digit(s) + "h" + 2-digit minutes + "m" (e.g. "9h55m")
+		expect(visible).toMatch(/\d+h\d{2}m/);
 		// Reset countdown pattern: "/" followed by digits.digits (e.g. "/24.00")
 		expect(visible).toMatch(/\/\d+\.\d{2}/);
 	});
@@ -496,7 +503,7 @@ describe("buildQuotaStatus compact mode", () => {
 		const compact = buildQuotaStatus("minimax-text-01", cache(), true)!;
 		const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
 		expect(stripAnsi(compact).length).toBeLessThan(stripAnsi(full).length);
-		// Pace hours (~6 chars × 2) + reset countdowns (~6 chars × 2) ≈ 24 chars trimmed.
+		// Pace hours (5-7 chars × 2) + reset countdowns (~6 chars × 2) ≈ 24 chars trimmed.
 		// Lower the floor from 15 to a still-meaningful 10 to reflect the change.
 		expect(stripAnsi(full).length - stripAnsi(compact).length).toBeGreaterThanOrEqual(10);
 		// Compact still has both bars
@@ -587,8 +594,8 @@ describe("buildRow1 narrow-terminal fallback to compact right", () => {
 
 	it("uses full right at wide widths (≥ ~120 cols)", () => {
 		const line = buildRow1(makePayload("minimax-text-01", "/some/folder"), minimaxCache(), 140, gitInfo, 0);
-		// Full right includes pace hours
-		expect(line).toMatch(/\d+\.\d+h/);
+		// Full right includes pace hours as HhMM (e.g. "25h30m")
+		expect(line).toMatch(/\d+h\d{2}m/);
 		expect(line).toContain("5H:");
 		expect(line).toContain("ph-3-bugfix");
 	});
@@ -658,7 +665,8 @@ describe("buildRow1 edge cases — phase interactions", () => {
 		// that the digit is wrapped in \x1b[91m WITHOUT \x1b[1m, even though
 		// the branch label has \x1b[1m elsewhere.
 		const result = formatGitCenter({ branch: "feat", count: 3, text: "", isWorktree: true }, BLINK_QUARTER_PERIOD_MS * 2);
-		expect(result).toContain("feat [wt]");
+		// Marker is amber at 2×Q (shared 4-phase clock with the digit).
+		expect(result).toContain("\x1b[38;2;224;168;0m\x1b[1m[wt]");
 		expect(strip(result)).toContain("3 files");
 		// Bright red present (somewhere)
 		expect(result).toContain("\x1b[91m");
@@ -668,14 +676,26 @@ describe("buildRow1 edge cases — phase interactions", () => {
 		expect(result).not.toMatch(/\x1b\[91m\x1b\[1m3/);
 	});
 
-	it("renders worktree + clean (no digit) consistently across all 4 phases", () => {
+	it("renders worktree + clean with the marker cycling across all 4 phases", () => {
 		const cleanWt: GitInfo = { branch: "feat-x", count: 0, text: "", isWorktree: true };
 		const phases = [0, BLINK_QUARTER_PERIOD_MS, BLINK_QUARTER_PERIOD_MS * 2, BLINK_QUARTER_PERIOD_MS * 3];
+		const widths: number[] = [];
 		for (const now of phases) {
 			const result = formatGitCenter(cleanWt, now);
-			expect(result).toContain("feat-x [wt]");
+			const phase = Math.floor(now / BLINK_QUARTER_PERIOD_MS) % 4;
+			// Branch is always static cyan bold…
+			expect(result).toContain("\x1b[96m\x1b[1mfeat-x\x1b[22m\x1b[39m ");
 			expect(result).toContain("clean");
+			// …and the marker shows [wt] on visible phases, spaces on off phases.
+			if (phase === 0 || phase === 2) {
+				expect(result).toContain("[wt]");
+			} else {
+				expect(strip(result)).not.toContain("[wt]");
+			}
+			widths.push(strip(result).length);
 		}
+		// Column width is identical in every phase — no layout shift.
+		expect(new Set(widths).size).toBe(1);
 	});
 
 	it("phase transitions do not leak ANSI codes across the right column", () => {

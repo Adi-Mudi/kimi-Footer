@@ -7,19 +7,21 @@ Guidance for AI sessions working in this directory.
 - `kimi.plugin.json` — plugin manifest (manifest field reference: kimi-code Plugins doc)
 - `src/` — TypeScript source modules. Mostly pure; one I/O exception noted below.
   - `types.ts` — shared interfaces (`QuotaData`, `CacheFile`, `QuotaCache`, `StatusLinePayload`, `GitInfo`)
-  - `quota-cache.ts` — quota cache file read/write (lock-protected at call sites)
-  - `file-lock.ts` — `withFileLock` advisory file lock helper
+  - `quota-cache.ts` — quota cache file read/write (lock-protected at call sites; atomic tmp+rename writes)
+  - `file-lock.ts` — `withFileLock` advisory file lock helper (exclusive-create `wx` acquisition, no TOCTOU)
+  - `git-cache.ts` — mtime-keyed git cache (`.git/HEAD` + `.git/index` mtimes + maxAge). Atomic tmp+rename writes. Never TTL-only.
+  - `model-detect.ts` — pure model-name detectors (`isKimiModel` / `isMinimaxModel`). No I/O. The only model-detection import allowed in `bin/`.
   - `helpers.ts` — bar / pace / color formatting (port of pi-footer `helpers.ts`)
-  - `label-blink.ts` — pure ANSI blink helpers (`BLINK_HALF_PERIOD_MS`, `pickBlinkColor`, `formatKimiLabel`). Imports only from `./types.js`.
+  - `label-blink.ts` — pure ANSI blink helpers (`BLINK_QUARTER_PERIOD_MS`, `pickBlinkPhase`, `formatKimiLabel`, `formatWorktreeMarker`). Imports only from `./types.js`.
   - `kimi-fetcher.ts` — Kimi API fetch + module-level `currentData`
   - `minimax-fetcher.ts` — MiniMax Coding Plan fetch + module-level `currentData`, auto-region
-  - `git-footer.ts` — git branch + dirty count. Spawns `git` subprocesses on every call. **No cache, no lock** (v1.3.1).
+  - `git-footer.ts` — git branch + dirty count. ONE bounded `git --no-optional-locks status --porcelain=v2 --branch` subprocess on mtime-cache miss (300 ms timeout). Worktree detection reads `.git` directly (no subprocess). Branch prefers kimi-code's stdin `gitBranch`.
   - `sunset-dir.ts` — sunset gradient folder styling
   - `width.ts` — terminal width detection
 - `hooks/` — entry points invoked by kimi-code, built to `dist/hooks/` by `tsc`.
   - `refresh-cache.ts` — hook target (SessionStart + SessionHeartbeat). Writes only the quota cache.
 - `bin/` — entry point invoked by `tui.toml [status_line].command`, built to `dist/bin/`.
-  - `render-row1.ts` — status-line renderer (reads quota cache + calls `getGitDetails` live)
+  - `render-row1.ts` — status-line renderer (reads quota cache + stdin payload; dirty count via the mtime cache in `getGitDetails`)
 - `tools/` — dev workflow helpers, no Kimi runtime role.
   - `sync-to-managed.mjs` — no-symlink dev workflow helper
 - `skills/quota-line/SKILL.md` — auto-loaded at session start
@@ -41,12 +43,13 @@ The plugin splits into five layers. Each has a single direction of responsibilit
 | Tools | `.mjs` helpers used by the dev loop only | nothing | local dev workflow |
 | Source | Pure modules (no I/O) | `types.ts` only | hooks + bin + tests |
 
-The four hard rules below are enforced by `test/architecture.test.ts` (see Phase D9). Do not violate them; the test will fail in CI.
+The five hard rules below are enforced by `test/architecture.test.ts`. Do not violate them; the test will fail in CI.
 
-1. **Render is read-only.** `bin/render-row1.ts` must not call `fetch`, must not write files, must not open network sockets. It reads the cache and stdin only.
+1. **Render is read-only.** `bin/render-row1.ts` must not call `fetch`, must not write files, must not spawn subprocesses itself. It reads the quota cache, the stdin payload, and the mtime-keyed git cache only.
 2. **Hooks do I/O.** `hooks/refresh-cache.ts` may call APIs, write caches, block up to 30 s. It is the only layer that talks to Kimi/MiniMax.
-3. **Source modules stay pure — except `git-footer.ts`.** Anything in `src/` (except `src/quota-cache.ts` and `src/file-lock.ts`) must not import `node:fs`, `node:child_process`, or `fetch`. The ONE exception is `src/git-footer.ts`, which spawns `git` subprocesses by design — that is the v1.3.1 fix for live git status. Other source modules must remain importable from unit tests without side effects.
-4. **Skills and commands are markdown only.** No executable code lives under `skills/` or `commands/`.
+3. **`bin/` must not import the fetcher modules.** The fetchers read `auth.json` at module init; importing even a pure function from them pulls the credential read into every render. Model detection comes from `src/model-detect.ts` only.
+4. **Source modules stay pure — except the cache/git modules.** Anything in `src/` (except `src/quota-cache.ts`, `src/git-cache.ts`, `src/file-lock.ts`, `src/git-footer.ts`) must not import `node:fs`, `node:child_process`, or `fetch`. `src/git-footer.ts` spawns ONE bounded git subprocess on mtime-cache miss by design.
+5. **Skills and commands are markdown only.** No executable code lives under `skills/` or `commands/`.
 
 ## Architecture diagram
 
@@ -75,9 +78,11 @@ bin/render-row1.ts  ──(read)──▶  quota-cache  (read-only)
 stdout → kimi-code TUI row 1
 ```
 
-The render path is the strictest: from `bin/render-row1.ts` downward, only `readQuotaCache` and `readStdin` touch the outside world, both are bounded reads. `src/git-footer.ts` spawns `git` subprocesses on every call — that is intentional (v1.3.1 fix): kimi-code throttles the status line to once per second, so caching adds staleness without saving work. Everything else in `src/` is pure and runs in well under the 300 ms status-line budget.
+The render path is the strictest: from `bin/render-row1.ts` downward, the outside world is touched only by `readQuotaCache`, `readStdin`, the `.git` mtime stats, and — on mtime-cache miss — ONE bounded `git --no-optional-locks status` subprocess. Everything else in `src/` is pure and runs in well under the 300 ms status-line budget.
 
-The only disk cache is the quota cache. Git data is read live from `git status` on every render. The `withFileLock(quota.lock)` boundary protects the quota cache write; there is no lock for git.
+Two disk caches, two lock regimes:
+- **Quota cache** — written only by the hook under `withFileLock(quota.lock)`; read-only in render. Atomic tmp+rename writes.
+- **Git cache** — mtime-keyed (`cwd` + `.git/HEAD` + `.git/index` mtimes + maxAge, default 2000 ms, env `KIMI_GIT_MAX_AGE_MS`, 0 = always live). Validity is checked at READ time against CURRENT mtimes — the v1.3.1 write-time-TTL staleness bug is structurally impossible. Plain file edits do not touch `.git/index`, so counts can be up to maxAge old (documented blind spot; ccstatusline ships the same trade-off). Atomic tmp+rename writes.
 
 ## Commands
 
@@ -101,7 +106,7 @@ After `npm run sync`, open kimi-code and run `/plugins reload`.
 2. **Fixed status colors are intentional.** Bars use `statusFg()` truecolor (`#28a745` / `#e0a800` / `#dc3545`). Do NOT swap them for theme tokens — see the dim color note below for the one accepted deviation.
 3. **Dim color is a fixed ANSI gray (`\x1b[38;5;244m`).** The status-line script has no access to the active kimi-code theme at runtime, so we emit a single color. Bar colors stay truecolor.
 4. **No real network, no real secrets in tests.** Tests mock `fetch` via subprocess (`spawnSync`); they use fake keys; they redirect `$XDG_RUNTIME_DIR` and `$KIMI_CODE_HOME` to tmp dirs.
-5. **`src/` stays pure — except for git.** Anything that touches stdin/stdout/filesystem stays in `hooks/`, `bin/`, `tools/`, or the dedicated cache modules (`src/quota-cache.ts`). `src/helpers.ts`, `src/sunset-dir.ts`, and the fetchers must remain importable from tests with no side effects. `src/git-footer.ts` is the one exception — it spawns `git` subprocesses by design (v1.3.1 fix).
+5. **`src/` stays pure — except the cache/git modules.** Anything that touches stdin/stdout/filesystem stays in `hooks/`, `bin/`, `tools/`, or the dedicated cache modules (`src/quota-cache.ts`, `src/git-cache.ts`). `src/helpers.ts`, `src/sunset-dir.ts`, `src/model-detect.ts`, and the fetchers must remain importable from tests with no side effects. `src/git-footer.ts` is the git exception — ONE bounded subprocess on mtime-cache miss, by design.
 6. **TypeScript everywhere.** No `.js` or `.mjs` source except the dev-only `scripts/sync-to-managed.mjs` (which is plain Node and needs no build).
 7. **Build before testing subprocess code.** `cache-roundtrip.test.ts` and `stress.test.ts` spawn `dist/scripts/*.js`. Run `npm run build` after any change to `scripts/*.ts`.
 8. **Module imports use `.js` extensions** even for `.ts` files (NodeNext ESM resolution).

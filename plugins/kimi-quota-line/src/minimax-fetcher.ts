@@ -92,13 +92,10 @@ export function isQuotaModel(name: unknown): boolean {
 	return s.startsWith("minimax-m") || s.startsWith("coding-plan") || s === "general";
 }
 
-/**
- * True when the given model id or name identifies a MiniMax model.
- */
-export function isMinimaxModel(modelIdOrName?: string): boolean {
-	const id = (modelIdOrName ?? "").toString().toLowerCase();
-	return id.includes("minimax");
-}
+// Model detection moved verbatim to src/model-detect.ts so bin/render-row1.ts
+// never loads this module (which reads auth.json at init). Re-exported for
+// backwards compatibility with hooks + existing tests.
+export { isMinimaxModel } from "./model-detect.js";
 
 /**
  * Converts MiniMax reset fields into an ISO string.

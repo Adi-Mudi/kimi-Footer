@@ -1,34 +1,43 @@
 /**
  * Git footer details — branch name + uncommitted file count.
  *
- * TWO GIT CALLS per render (v1.3.3). We use
- * `git status --porcelain=v2 --branch` to get branch info + the change
- * count in one subprocess, plus `git rev-parse --git-dir` to detect
- * worktrees (works from any cwd, including subdirectories of the
- * worktree). v1.3.3.1 reverted a v1.3.3 attempt to use
- * `fs.statSync(".git")` instead — that broke worktree detection in
- * subdirectories because `.git` is only at the worktree root.
+ * COMMUNITY ARCHITECTURE (mtime-keyed cache, bounded git):
  *
- * Total cold cost is well under the 300 ms status-line budget even on
- * huge repos. v1.3.2 used three separate git calls and could push the
- * total over the cap on large repos; v1.3.3 + v1.3.3.1 keep the
- * reduction but restore correct worktree semantics.
+ * Branch: prefers kimi-code's stdin payload field `gitBranch` — the
+ * official tui.toml [status_line] snapshot includes it. The local
+ * porcelain read is only a fallback (payload empty / detached HEAD).
  *
- * LIVE DATA ONLY. Each render runs git fresh. No in-memory cache, no
- * disk cache. Kimi-code already throttles the status line to once per
- * second (see the [config-files doc](https://www.kimi.com/code/docs/en/
- * kimi-code-cli/configuration/config-files.html#tui-toml)), so there
- * is never more than one render in flight; caching would only hide
- * live edits from the developer.
+ * Worktree + dirty count: ONE bounded subprocess,
+ * `git --no-optional-locks status --porcelain=v2 --branch`, run ONLY when
+ * the mtime-keyed disk cache (src/git-cache.ts) is invalid. The cache key
+ * is the cwd plus the mtime of `.git/HEAD` and `.git/index`:
+ *   - staging, committing, branch switches touch those files → instant
+ *     refresh on the next render;
+ *   - plain file edits / untracked files do NOT touch them → the count
+ *     may be up to maxAgeMs old (default 2000 ms, env
+ *     KIMI_GIT_MAX_AGE_MS, 0 = always live). This bounded
+ *     blind spot is the documented trade-off — ccstatusline ships the
+ *     same TTL + mtime combination.
  *
- * Three exported wrappers (`getCurrentBranch`, `isInWorktree`,
- * `getUncommittedCount`) remain as thin facades over `collectRawGit()`
- * so existing tests + call sites are unchanged. Each pays both git
- * calls on its own; the render path goes through `getGitDetails` /
- * `buildGitDetails` which calls `collectRawGit()` once and shares the
- * result.
+ * The age check runs at READ time against the CURRENT mtimes — never a
+ * write-time "fresh enough" flag. The v1.3.1 staleness bug (write-time
+ * TTL passing a 1 s check on 60 s-old data) is structurally impossible.
+ *
+ * Worktree detection: walk up from cwd to `.git`. A `.git` DIRECTORY is a
+ * main checkout; a `.git` FILE is a linked worktree whose `gitdir:` line
+ * points into `<main>/.git/worktrees/<name>` (works from any
+ * subdirectory — the v1.3.3.1 semantics). No `git rev-parse` subprocess.
+ *
+ * `--no-optional-locks` keeps the status line from ever racing the user's
+ * own git commands for `.git/index.lock` (ccstatusline's fix).
+ *
+ * Cold cost: one subprocess bounded at 300 ms (kimi-code's entire
+ * status-line budget); steady state: zero subprocesses.
  */
 import { execSync } from "node:child_process";
+import { readFileSync, statSync } from "node:fs";
+import { dirname, isAbsolute, join } from "node:path";
+import { isCacheValid, readGitCache, resolveMaxAgeMs, statGitDir, writeGitCacheAtomic } from "./git-cache.js";
 import type { GitInfo } from "./types.js";
 
 interface RawGit {
@@ -37,62 +46,144 @@ interface RawGit {
 	count: number;
 }
 
-const PORCELAIN_TIMEOUT_MS = 500;
+const GIT_TIMEOUT_MS = 300;
+
+interface GitDirDiscovery {
+	/** Directory that holds HEAD + index for the current checkout. */
+	gitDir: string;
+	isWorktree: boolean;
+}
 
 /**
- * One pass at git: branch + dirty count + worktree flag.
- * Returns null when not in a git repo or git is unavailable.
+ * Walks up from cwd looking for `.git`.
+ * - `.git` directory → main checkout.
+ * - `.git` file → linked worktree (or submodule); its `gitdir:` line
+ *   points at the real git dir. A path containing `worktrees` is a linked
+ *   worktree; submodule git dirs (`.git/modules/...`) are not.
+ * Returns null when no `.git` exists anywhere up the tree.
  */
-function collectRawGit(): RawGit | null {
-	let stdout: string;
-	try {
-		stdout = execSync("git status --porcelain=v2 --branch", {
-			encoding: "utf-8",
-			stdio: ["pipe", "pipe", "ignore"],
-			timeout: PORCELAIN_TIMEOUT_MS,
-		});
-	} catch {
-		return null;
+function discoverGitDir(): GitDirDiscovery | null {
+	let dir = process.cwd();
+	for (;;) {
+		const dotGit = join(dir, ".git");
+		let st: import("node:fs").Stats | null = null;
+		try {
+			st = statSync(dotGit);
+		} catch {
+			st = null;
+		}
+		if (st?.isDirectory()) {
+			return { gitDir: dotGit, isWorktree: false };
+		}
+		if (st?.isFile()) {
+			try {
+				const content = readFileSync(dotGit, "utf-8").trim();
+				const m = /^gitdir:\s*(.+)$/m.exec(content);
+				if (m?.[1]) {
+					const target = m[1].trim();
+					const gitDir = isAbsolute(target) ? target : join(dir, target);
+					return { gitDir, isWorktree: gitDir.includes("worktrees") };
+				}
+			} catch {
+				// unreadable .git file → treat as no repo
+				return null;
+			}
+		}
+		const parent = dirname(dir);
+		if (parent === dir) return null;
+		dir = parent;
 	}
+}
 
+/**
+ * Parses `git status --porcelain=v2 --branch` output.
+ * Branch rules (unchanged since v1.3.3): `# branch.head <name>` on a
+ * branch; `(detached)` and `(initial)` → null. Count: v2 entries starting
+ * with '1' (changed), '2' (renamed/copied), '?' (untracked); '!'
+ * (ignored) is intentionally not counted.
+ */
+function parsePorcelain(stdout: string): { branch: string | null; count: number } {
 	let branch: string | null = null;
 	let count = 0;
 	for (const line of stdout.split("\n")) {
 		if (line === "") continue;
 		if (line.startsWith("# branch.head ")) {
-			// `# branch.head main` on a branch; `# branch.head (detached)`
-			// on detached HEAD; `# branch.head (initial)` on unborn.
 			const head = line.slice("# branch.head ".length).trim();
 			if (head && head !== "(detached)" && head !== "(initial)") {
 				branch = head;
 			}
 		} else if (!line.startsWith("#")) {
-			// v2 entries start with '1' (changed), '2' (renamed/copied),
-			// '?' (untracked). '!' (ignored) is intentionally not counted.
 			const c = line[0];
 			if (c === "1" || c === "2" || c === "?") count++;
 		}
 	}
+	return { branch, count };
+}
 
-	let isWorktree = false;
-	try {
-		// `git rev-parse --git-dir` walks up from cwd to find the worktree
-		// root and returns either `.git` (main checkout) or
-		// `/path/to/main/.git/worktrees/<name>` (worktree). Checking for
-		// the `worktrees` segment is the canonical worktree test from any
-		// cwd. fs.statSync(".git") was tried in v1.3.3 but breaks when
-		// cwd is a subdirectory of the worktree.
-		const gitDir = execSync("git rev-parse --git-dir", {
-			encoding: "utf-8",
-			stdio: ["pipe", "pipe", "ignore"],
-			timeout: PORCELAIN_TIMEOUT_MS,
-		}).trim();
-		isWorktree = gitDir.includes("worktrees");
-	} catch {
-		isWorktree = false;
+/**
+ * One pass at git: branch + dirty count + worktree flag.
+ * Consults the mtime cache first; runs the bounded subprocess only on a
+ * cache miss. Returns null when not in a git repo or git is unavailable.
+ */
+function collectRawGit(): RawGit | null {
+	const discovery = discoverGitDir();
+	if (!discovery) return null;
+
+	const cwd = process.cwd();
+	const now = Date.now();
+	const stats = statGitDir(discovery.gitDir);
+	const maxAgeMs = resolveMaxAgeMs();
+
+	if (stats) {
+		const cached = readGitCache();
+		if (
+			cached &&
+			isCacheValid(
+				cached,
+				{
+					cwd,
+					headMtimeMs: stats.headMtimeMs,
+					indexMtimeMs: stats.indexMtimeMs,
+					now,
+				},
+				maxAgeMs,
+			)
+		) {
+			return { branch: cached.branch, isWorktree: cached.isWorktree, count: cached.count };
+		}
 	}
 
-	return { branch, isWorktree, count };
+	let stdout: string;
+	try {
+		stdout = execSync("git --no-optional-locks status --porcelain=v2 --branch", {
+			encoding: "utf-8",
+			stdio: ["pipe", "pipe", "ignore"],
+			timeout: GIT_TIMEOUT_MS,
+		});
+	} catch {
+		return null;
+	}
+
+	const { branch, count } = parsePorcelain(stdout);
+
+	if (stats) {
+		try {
+			writeGitCacheAtomic({
+				cwd,
+				headMtimeMs: stats.headMtimeMs,
+				indexMtimeMs: stats.indexMtimeMs,
+				capturedAt: now,
+				branch,
+				isWorktree: discovery.isWorktree,
+				count,
+			});
+		} catch {
+			// best effort — a failed cache write only costs the next render
+			// one extra subprocess
+		}
+	}
+
+	return { branch, isWorktree: discovery.isWorktree, count };
 }
 
 /**
@@ -104,10 +195,8 @@ export function getCurrentBranch(): string | null {
 }
 
 /**
- * Checks if the current directory is inside a git worktree, via
- * `git rev-parse --git-dir` — the canonical way to detect worktrees
- * from any cwd (the main checkout returns `.git`; a worktree returns
- * a path containing `/worktrees/`).
+ * Checks if the current directory is inside a git worktree, via the
+ * `.git` file walk-up (no subprocess). Main checkout → false.
  */
 export function isInWorktree(): boolean {
 	return collectRawGit()?.isWorktree ?? false;
@@ -122,26 +211,29 @@ export function getUncommittedCount(): number {
 }
 
 /**
- * Builds git details for the footer. Always live — no caching. The
- * `getBranch` argument is preserved for backwards compatibility with the
- * render-row1 call site; the actual branch is read from the shared
- * `collectRawGit()` result so we never spawn git twice.
+ * Builds git details for the footer. The `_getBranch` argument is
+ * preserved for backwards compatibility with old call sites but is not
+ * used; branch resolution now prefers the kimi-code stdin payload.
  */
 export function buildGitDetails(_getBranch: () => string | null): GitInfo | undefined {
-	const r = collectRawGit();
-	if (!r?.branch) {
-		return { branch: "", count: 0, text: "no git repo", isWorktree: false };
-	}
-	const branchLabel = r.isWorktree ? `${r.branch} [wt]` : r.branch;
-	const text = r.count > 0 ? `${branchLabel} \u2022 ${r.count} files` : `${branchLabel} \u2022 clean`;
-	return { branch: r.branch, count: r.count, text, isWorktree: r.isWorktree };
+	return getGitDetails(null);
 }
 
 /**
- * Renders git details live on every call. This is the function the render
- * path calls. The `getBranch` argument is accepted for backwards
- * compatibility with existing call sites but is not used internally.
+ * Renders git details. `payloadBranch` is kimi-code's stdin snapshot
+ * field `gitBranch` (official, always fresh) and wins over the local
+ * read; the porcelain branch is the fallback (payload empty or detached
+ * HEAD). Repo-ness and worktree flag come from the local discovery.
  */
-export function getGitDetails(getBranch: () => string | null = getCurrentBranch): GitInfo | undefined {
-	return buildGitDetails(getBranch);
+export function getGitDetails(payloadBranch: string | null = null): GitInfo | undefined {
+	const r = collectRawGit();
+	const branch = payloadBranch ?? r?.branch ?? null;
+	if (!branch) {
+		return { branch: "", count: 0, text: "no git repo", isWorktree: false };
+	}
+	const isWorktree = r?.isWorktree ?? false;
+	const count = r?.count ?? 0;
+	const branchLabel = isWorktree ? `${branch} [wt]` : branch;
+	const text = count > 0 ? `${branchLabel} \u2022 ${count} files` : `${branchLabel} \u2022 clean`;
+	return { branch, count, text, isWorktree };
 }

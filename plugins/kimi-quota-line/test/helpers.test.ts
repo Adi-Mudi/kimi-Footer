@@ -81,15 +81,25 @@ describe("vbar", () => {
 });
 
 describe("formatPaceHours", () => {
-	it("renders positive values bare, negative with minus", () => {
-		expect(formatPaceHours(14.2)).toBe("14.2h");
-		expect(formatPaceHours(-14.2)).toBe("-14.2h");
+	it("renders hours + minutes, negative with a leading minus", () => {
+		expect(formatPaceHours(14.2)).toBe("14h12m");
+		expect(formatPaceHours(-14.2)).toBe("-14h12m");
+		expect(formatPaceHours(0.5)).toBe("0h30m");
+		expect(formatPaceHours(9.924)).toBe("9h55m");
+		expect(formatPaceHours(-0.7903)).toBe("-0h47m");
+		expect(formatPaceHours(108.7)).toBe("108h42m");
 	});
 
-	it("collapses near-zero to 0 (no -0.0h artifact)", () => {
-		expect(formatPaceHours(0)).toBe("0.0h");
-		expect(formatPaceHours(0.04)).toBe("0.0h");
-		expect(formatPaceHours(-0.04)).toBe("0.0h");
+	it("collapses near-zero to 0 (no -0h00m artifact)", () => {
+		expect(formatPaceHours(0)).toBe("0h00m");
+		expect(formatPaceHours(0.04)).toBe("0h00m");
+		expect(formatPaceHours(-0.04)).toBe("0h00m");
+	});
+
+	it("rounds whole minutes first so the minute field never reaches 60", () => {
+		expect(formatPaceHours(1.999)).toBe("2h00m");
+		expect(formatPaceHours(0.9999)).toBe("1h00m");
+		expect(formatPaceHours(-1.999)).toBe("-2h00m");
 	});
 });
 
