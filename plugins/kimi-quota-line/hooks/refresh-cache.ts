@@ -9,6 +9,7 @@ import type { QuotaCache } from "../src/types.js";
 interface HookPayload {
 	hook_event_name?: unknown;
 	model?: unknown;
+	session_id?: unknown;
 }
 
 async function readStdin(): Promise<HookPayload> {
@@ -54,8 +55,19 @@ async function main(): Promise<void> {
 	
 	if (payload.hook_event_name === "SessionStart") {
 		const existing = readQuotaCache();
+		const sid = typeof payload.session_id === "string" && payload.session_id ? payload.session_id : null;
+		const sessions = { ...(existing?.sessions ?? {}) };
+		const now = Date.now();
+		if (sid) {
+			const alias = parseModelAlias(payload.model);
+			const prov = alias.provider ? alias.provider : null;
+			sessions[sid] = { model: normalized, provider: prov, updatedAt: now };
+			for (const [k, v] of Object.entries(sessions)) {
+				if (now - (v?.updatedAt ?? 0) > 24 * 60 * 60 * 1000) delete sessions[k];
+			}
+		}
 		const cache: QuotaCache = {
-			ts: Date.now(),
+			ts: now,
 			model: normalized,
 			...emptyCacheSlots(),
 			kimi: existing?.kimi ?? null,
@@ -64,6 +76,7 @@ async function main(): Promise<void> {
 			openrouter2: existing?.openrouter2 ?? null,
 			opencodeGo: existing?.opencodeGo ?? null,
 			cline: existing?.cline ?? null,
+			sessions,
 		};
 		try {
 			await withFileLock(QUOTA_LOCK_PATH, async () => {
@@ -82,6 +95,7 @@ async function main(): Promise<void> {
 		ts: Date.now(),
 		model: normalized ?? existing?.model ?? null,
 		...emptyCacheSlots(),
+		sessions: existing?.sessions,
 	};
 	for (const p of PROVIDERS) {
 		const key = p.cacheKey;

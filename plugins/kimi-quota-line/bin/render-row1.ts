@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 import { getGitDetails } from "../src/git-footer.js";
 import { sessionPaceColor, statusFg, weeklyPaceColor } from "../src/helpers.js";
 import { formatProviderLabel, formatWorktreeMarker, pickBlinkPhase } from "../src/label-blink.js";
-import { fullModelName, resolveActiveProviderId, shortLabelFor } from "../src/model-detect.js";
+import { fullModelName, resolveForSession, shortLabelFor } from "../src/model-detect.js";
 import { readQuotaCache } from "../src/quota-cache.js";
 import { styledCwd } from "../src/sunset-dir.js";
 import type { GitInfo, QuotaCache, QuotaData, RequestQuotaData, StatusLinePayload } from "../src/types.js";
@@ -94,10 +94,11 @@ export function buildRightZone(
 	cache: QuotaCache | null,
 	withMetrics: boolean = true,
 	now: number = Date.now(),
+	sessionId?: string | null,
 ): string | undefined {
 	if (!payloadModel) return undefined;
 
-	const providerId = resolveActiveProviderId(payloadModel, cache?.model ?? null);
+	const providerId = resolveForSession(payloadModel, cache, sessionId ?? null);
 	const short = shortLabelFor(providerId);
 	const model = fullModelName(payloadModel, cache?.model ?? null);
 	if (!short && !model) return undefined;
@@ -152,7 +153,7 @@ export function buildRow1(
 	const gitInfo = git !== undefined ? git : (getGitDetails(payload.gitBranch || null) ?? null);
 	const center = formatGitCenter(gitInfo, now);
 
-	const rightFull = buildRightZone(payload.model || "", cache, true, now);
+	const rightFull = buildRightZone(payload.model || "", cache, true, now, payload.sessionId);
 	if (!rightFull) {
 		const leftW = visibleWidth(left);
 		if (center && center.trim().length > 0) {
@@ -182,7 +183,7 @@ export function buildRow1(
 	if (fullLayout !== null) return fullLayout;
 
 	
-	const rightNoMetrics = buildRightZone(payload.model || "", cache, false, now);
+	const rightNoMetrics = buildRightZone(payload.model || "", cache, false, now, payload.sessionId);
 	if (rightNoMetrics) {
 		const noMetLayout = layout3Col(rightNoMetrics);
 		if (noMetLayout !== null) return noMetLayout;

@@ -21,6 +21,12 @@ export interface GitInfo {
 	isWorktree: boolean;
 }
 
+export interface SessionEntry {
+	model: string | null;
+	provider: string | null;
+	updatedAt: number;
+}
+
 export interface QuotaCache {
 	ts: number;
 	model: string | null;
@@ -30,6 +36,7 @@ export interface QuotaCache {
 	openrouter2?: RequestQuotaData | null;
 	opencodeGo?: QuotaData | null;
 	cline?: QuotaData | null;
+	sessions?: Record<string, SessionEntry>;
 }
 
 export interface StatusLinePayload {

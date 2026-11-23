@@ -5,6 +5,7 @@ import {
 	fullModelName,
 	parseModelAlias,
 	resolveActiveProviderId,
+	resolveForSession,
 	resolveProviderId,
 	shortLabelFor,
 } from "../src/model-detect.js";
@@ -192,5 +193,34 @@ describe("buildRightZone end-to-end", () => {
 	it("unknown provider prefix without cache -> dim model only", () => {
 		const line = buildRightZone("kilo/unknown-model", null, true, 0);
 		expect(line).toBe(`${DIM}unknown-model${RESET}`);
+	});
+});
+
+describe("resolveForSession", () => {
+	it("uses session model over global cache", () => {
+		const cache = {
+			model: "kimi-code/kimi-k3.1-pro",
+			sessions: {
+				s1: { model: "openrouter/openai/gpt-6-sol", provider: "openrouter", updatedAt: 1 },
+			},
+		};
+		expect(resolveForSession("gpt-6-sol", cache, "s1")).toBe("openrouter");
+		expect(resolveForSession("gpt-6-sol", cache, "missing")).toBe("kimi-code");
+	});
+
+	it("payload prefix wins over session", () => {
+		const cache = {
+			model: "kimi-code/x",
+			sessions: { s1: { model: "openrouter/openai/gpt-6-sol", provider: "openrouter", updatedAt: 1 } },
+		};
+		expect(resolveForSession("openrouter-2/openai/gpt-6-sol", cache, "s1")).toBe("openrouter-2");
+	});
+
+	it("bare kimi overrides foreign gateway session is NOT applied when session exists", () => {
+		const cache = {
+			model: "openrouter/openai/gpt-6-sol",
+			sessions: { s1: { model: "openrouter/openai/gpt-6-sol", provider: "openrouter", updatedAt: 1 } },
+		};
+		expect(resolveForSession("kimi-k3.1-pro", cache, "s1")).toBe("openrouter");
 	});
 });

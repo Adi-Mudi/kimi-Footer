@@ -4,6 +4,31 @@ import { join } from "node:path";
 import { formatRemaining } from "./helpers.js";
 import type { QuotaData } from "./types.js";
 
+function readHomeFile(name: string): string | null {
+	try {
+		const dir = process.env.KIMI_CODE_HOME || join(homedir(), ".kimi-code");
+		return readFileSync(join(dir, name), "utf-8");
+	} catch {
+		return null;
+	}
+}
+
+function authKeyFrom(names: string[]): string | null {
+	for (const file of ["auth.json", "auth.json.reset"]) {
+		const raw = readHomeFile(file);
+		if (!raw) continue;
+		try {
+			const obj = JSON.parse(raw) as Record<string, { key?: string }>;
+			for (const n of names) {
+				const k = obj[n]?.key;
+				if (k) return k;
+			}
+		} catch {
+		}
+	}
+	return null;
+}
+
 const URL_INTL = "https://api.minimax.io/v1/api/openplatform/coding_plan/remains";
 const URL_CN = "https://api.minimaxi.com/v1/api/openplatform/coding_plan/remains";
 
@@ -35,15 +60,7 @@ interface CodingPlanResponse {
 }
 
 export function getMinimaxToken(): string | null {
-	try {
-		const agentDir = process.env.KIMI_CODE_HOME || join(homedir(), ".kimi-code");
-		const authPath = join(agentDir, "auth.json");
-		const raw = readFileSync(authPath, "utf-8");
-		const auth = JSON.parse(raw) as Record<string, { key?: string }>;
-		return auth.minimax?.key || auth["minimax-cn"]?.key || null;
-	} catch {
-		return process.env.MINIMAX_API_KEY || null;
-	}
+	return authKeyFrom(["minimax", "minimax-cn"]) || process.env.MINIMAX_API_KEY || null;
 }
 
 export const MINIMAX_TOKEN = getMinimaxToken();

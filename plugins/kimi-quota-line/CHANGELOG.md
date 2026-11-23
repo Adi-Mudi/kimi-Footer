@@ -19,6 +19,12 @@ All notable changes to kimi-quota-line are recorded here. Format follows [keep-a
 ### Fixed
 - Rule 8: comments stripped from shipped TS
 
+
+### Added (session-scoped cache - D8 / agy audit)
+- `QuotaCache.sessions[sessionId]` written on SessionStart (`session_id`)
+- Status-line resolves provider via `resolveForSession` (session model > global)
+- Kimi/MM token fallback: `auth.json` → `auth.json.reset` → env
+
 ### Removed (legacy format)
 - Bar glyphs `▮`/`▯`, `vbar()`, `pct()`, `formatTokens()`, `usageColor()`
 - Pace-hours text helpers: `formatPaceHours`, `weeklyPaceHours`, `sessionPaceHours`

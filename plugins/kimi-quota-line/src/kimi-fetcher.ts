@@ -4,6 +4,31 @@ import { join } from "node:path";
 import { formatRemaining } from "./helpers.js";
 import type { QuotaData } from "./types.js";
 
+function readHomeFile(name: string): string | null {
+	try {
+		const dir = process.env.KIMI_CODE_HOME || join(homedir(), ".kimi-code");
+		return readFileSync(join(dir, name), "utf-8");
+	} catch {
+		return null;
+	}
+}
+
+function authKeyFrom(names: string[]): string | null {
+	for (const file of ["auth.json", "auth.json.reset"]) {
+		const raw = readHomeFile(file);
+		if (!raw) continue;
+		try {
+			const obj = JSON.parse(raw) as Record<string, { key?: string }>;
+			for (const n of names) {
+				const k = obj[n]?.key;
+				if (k) return k;
+			}
+		} catch {
+		}
+	}
+	return null;
+}
+
 interface KimiUsageResponse {
 	usage?: Record<string, unknown>;
 	limits?: Array<{
@@ -13,15 +38,7 @@ interface KimiUsageResponse {
 }
 
 export function getKimiToken(): string | null {
-	try {
-		const agentDir = process.env.KIMI_CODE_HOME || join(homedir(), ".kimi-code");
-		const authPath = join(agentDir, "auth.json");
-		const raw = readFileSync(authPath, "utf-8");
-		const auth = JSON.parse(raw) as Record<string, { key?: string }>;
-		return auth["kimi-coding"]?.key || auth.kimi?.key || null;
-	} catch {
-		return process.env.KIMI_API_KEY || process.env.KIMI_AUTH_TOKEN || null;
-	}
+	return authKeyFrom(["kimi-coding", "kimi"]) || process.env.KIMI_API_KEY || process.env.KIMI_AUTH_TOKEN || null;
 }
 
 export const TOKEN = getKimiToken();
@@ -53,17 +70,14 @@ export async function fetchKimiUsage(): Promise<void> {
 		if (!res.ok) return;
 		const data = (await res.json()) as KimiUsageResponse;
 		if (!data?.usage) return;
-
 		const wUsed = Number(data.usage.used || 0);
 		const wLimit = Number(data.usage.limit || 1);
 		const wResetAt = getResetAt(data.usage);
-
 		const window = data.limits?.[0];
 		const hUsed = Number(window?.detail?.used || 0);
 		const hLimit = Number(window?.detail?.limit || 1);
 		const hResetAt = getResetAt(window?.detail);
 		const hRemaining = formatRemaining(hResetAt);
-
 		currentData = { wUsed, wLimit, wResetAt, hUsed, hLimit, hResetAt, hRemaining };
 	} catch {
 		currentData = null;

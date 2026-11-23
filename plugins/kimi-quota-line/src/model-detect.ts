@@ -122,3 +122,37 @@ export function resolveActiveProviderId(
 	if (payloadAlias.provider || cacheAlias.provider) return null;
 	return bareNameProviderId(payloadModel);
 }
+
+export function sessionCacheModel(
+	cache: { sessions?: Record<string, { model: string | null; provider?: string | null; updatedAt?: number }> } | null | undefined,
+	sessionId: string | null | undefined,
+): string | null {
+	if (!sessionId || !cache?.sessions) return null;
+	const e = cache.sessions[sessionId];
+	if (!e) return null;
+	const model = e.model ?? null;
+	if (e.provider && model && !model.includes("/")) return `${e.provider}/${model}`;
+	return model;
+}
+
+export function resolveForSession(
+	payloadModel: string,
+	cache: { model?: string | null; sessions?: Record<string, { model: string | null; provider?: string | null; updatedAt?: number }> } | null | undefined,
+	sessionId: string | null | undefined,
+): string | null {
+	const a = parseModelAlias(payloadModel);
+	if (a.provider) {
+		const pid = resolveProviderId(a.provider);
+		if (pid) return pid;
+	}
+	const fromSession = sessionCacheModel(cache, sessionId);
+	if (fromSession) {
+		const s = parseModelAlias(fromSession);
+		if (s.provider) {
+			const sid = resolveProviderId(s.provider);
+			if (sid) return sid;
+		}
+		return resolveActiveProviderId(payloadModel, fromSession);
+	}
+	return resolveActiveProviderId(payloadModel, cache?.model ?? null);
+}
