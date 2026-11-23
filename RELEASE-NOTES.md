@@ -6,6 +6,27 @@ per release.
 
 ---
 
+## v1.3.3-multisession — 2026-11-24 — Multi-session provider + labels
+
+**Tag**: `v1.3.3-multisession` · **Branch**: `main`
+
+### Highlights
+
+- Each kimi CLI session shows its **own** active model/provider (no more shared OPC-G).
+- `modelIndex` from `config.toml` (`display_name` / model id → provider).
+- Session-scoped cache: `sessions[sessionId]` + `resolveForSession`.
+- Status payload accepts `session_id` or `sessionId`.
+- Short labels: `OPC-G` (was OCG), `CL-P` (was CP).
+- Key badges: `Err:key` (red), `Err:api` (amber).
+- Live Herdr verify: `OR  Nemotron 3 Ultra (free)  Req: 217/1000`.
+
+### Verification
+
+- Tests 217/217 · stress 5/5 · typecheck/build green
+- Issue #2 closed · Discussion #1 updated
+
+---
+
 ## v1.3.2-gitlive — 2026-09-05 — Install UX
 
 **Tag**: `v1.3.2-gitlive` · **Commit**: `89087cb` (merge) · **Branch**: `main`
