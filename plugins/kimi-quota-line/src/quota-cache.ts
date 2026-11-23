@@ -1,13 +1,3 @@
-/**
- * Quota cache file I/O.
- *
- * Separate from the git cache (src/git-cache.ts) so the two functions can
- * have independent lock boundaries. Writes are intentionally plain; the
- * call site wraps with `withFileLock` (see hooks/refresh-cache.ts).
- *
- * Paths are computed lazily (on each call) so a runtime change to
- * $XDG_RUNTIME_DIR (e.g. tests setting a tmp dir) takes effect immediately.
- */
 import { readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { QuotaCache } from "./types.js";
@@ -16,20 +6,16 @@ function cacheDir(): string {
 	return process.env.XDG_RUNTIME_DIR || "/tmp";
 }
 
-/** Path the quota cache file lives at (computed lazily). */
 export function quotaCachePath(): string {
 	return join(cacheDir(), "kimi-quota-line-quota-cache.json");
 }
 
-/** Path the quota cache lock file lives at (computed lazily). */
 export function quotaLockPath(): string {
 	return `${quotaCachePath()}.lock`;
 }
 
-/** Back-compat alias: the lock path evaluated at the current moment. */
 export const QUOTA_LOCK_PATH = quotaLockPath();
 
-/** Reads the quota cache. Returns null on any read/parse failure. */
 export function readQuotaCache(): QuotaCache | null {
 	try {
 		const raw = readFileSync(quotaCachePath(), "utf-8");
@@ -39,13 +25,6 @@ export function readQuotaCache(): QuotaCache | null {
 	}
 }
 
-/**
- * Writes the quota cache atomically: tmp file first, then rename over
- * the target. Readers see either the complete old file or the complete
- * new file — never a torn one (two overlapping writers could previously
- * interleave mid-write; the lock narrows but cannot fully prevent that).
- * Throws on I/O failure (caller decides what to do).
- */
 export function writeQuotaCache(data: QuotaCache): void {
 	const target = quotaCachePath();
 	const tmp = `${target}.tmp-${process.pid}`;
@@ -56,7 +35,7 @@ export function writeQuotaCache(data: QuotaCache): void {
 		try {
 			unlinkSync(tmp);
 		} catch {
-			// temp may not exist if the write never started — best effort
+			
 		}
 		throw e;
 	}

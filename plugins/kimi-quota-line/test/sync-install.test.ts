@@ -1,16 +1,3 @@
-/**
- * sync-install.test.ts — unit + integration tests for tools/sync-to-managed.mjs
- * and tools/install.sh.
- *
- * Strategy: spawn the script as a subprocess with KIMI_CODE_HOME pointed at a
- * tmp directory. The script mutates the tmp HOME in place, so we can assert
- * on the resulting tui.toml / installed.json without touching the real
- * ~/.kimi-code.
- *
- * Why subprocess and not direct import: sync-to-managed.mjs is a plain Node
- * script with side effects at top level (it calls main() unconditionally).
- * Subprocess execution keeps tests hermetic.
- */
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -111,7 +98,7 @@ describe("sync-to-managed.mjs — tui.toml patching", () => {
 	});
 
 	it("does nothing when tui.toml does not exist", () => {
-		// No setup. runSync should still succeed.
+		
 		const result = runSync();
 		expect(result.status).toBe(0);
 		expect(existsSync(join(home, "tui.toml"))).toBe(false);
@@ -154,11 +141,11 @@ describe("sync-to-managed.mjs — installed.json bumping", () => {
 		const other = reg.plugins.find((p) => p.id === "other-plugin");
 		expect(ours).toBeDefined();
 		expect(other).toBeDefined();
-		expect(ours?.version).toBe(SRC_VERSION); // current source version
+		expect(ours?.version).toBe(SRC_VERSION); 
 		expect(typeof ours?.updatedAt).toBe("string");
 		expect(ours?.updatedAt).not.toBe("2026-01-01T00:00:00.000Z");
 		expect(ours?.installedAt).toBe("2026-01-01T00:00:00.000Z");
-		// Other entries untouched.
+		
 		expect(other?.updatedAt).toBe("2026-01-01T00:00:00.000Z");
 	});
 
@@ -189,9 +176,9 @@ describe("sync-to-managed.mjs — installed.json bumping", () => {
 
 describe("sync-to-managed.mjs — copies the source into the managed dir", () => {
 	it("creates the managed dir with the manifest and docs", () => {
-		// We do NOT run `npm run build` here. The plugin source ships without
-		// dist/ unless built. We just verify the sync script copies whatever
-		// exists in SRC to DST, excluding dev-only files.
+		
+		
+		
 		const result = runSync();
 		expect(result.status).toBe(0);
 		const managed = join(home, "plugins", "managed", "kimi-quota-line");
@@ -199,7 +186,7 @@ describe("sync-to-managed.mjs — copies the source into the managed dir", () =>
 		expect(existsSync(join(managed, "README.md"))).toBe(true);
 		expect(existsSync(join(managed, "skills"))).toBe(true);
 		expect(existsSync(join(managed, "commands"))).toBe(true);
-		// Dev-only dirs excluded.
+		
 		expect(existsSync(join(managed, "test"))).toBe(false);
 		expect(existsSync(join(managed, "tools"))).toBe(false);
 		expect(existsSync(join(managed, "node_modules"))).toBe(false);
@@ -213,8 +200,8 @@ describe("install.sh — one-shot installer (bash only)", () => {
 	})();
 
 	it.skipIf(!hasBash)("builds and syncs when kimi CLI is absent from PATH", () => {
-		// Strip kimi from PATH so the script's command -v probe fails and
-		// it falls through to the sync step.
+		
+		
 		const pathNoKimi = (process.env.PATH || "")
 			.split(":")
 			.filter((p) => {
@@ -237,9 +224,9 @@ describe("install.sh — one-shot installer (bash only)", () => {
 	});
 
 	it.skipIf(!hasBash)("still syncs the managed copy when a fake kimi is on PATH (prints hint, falls through)", () => {
-		// Stub a fake `kimi` that is on PATH so the script prints the
-		// /plugins install hint AND runs the sync step. Exercises both
-		// branches together.
+		
+		
+		
 		const stubDir = join(home, "stub-bin");
 		mkdirSync(stubDir, { recursive: true });
 		writeFileSync(join(stubDir, "kimi"), "#!/bin/sh\necho 'kimi stub'\nexit 0\n", { mode: 0o755 });
@@ -275,7 +262,7 @@ describe("postinstall.mjs — stale-managed warning", () => {
 	});
 
 	it("warns when the source version differs from the managed version", () => {
-		// Source ships the current SRC_VERSION; we write v0.0.1 to the managed copy.
+		
 		mkdirSync(join(home, "plugins", "managed", "kimi-quota-line"), {
 			recursive: true,
 		});

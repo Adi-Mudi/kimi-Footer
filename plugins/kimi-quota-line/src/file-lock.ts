@@ -1,25 +1,3 @@
-/**
- * Advisory file lock — guarantees atomic read/write of the cache files.
- *
- * Node.js v22.22 does not yet expose `fs.flock` (added in later minors / not
- * backported to this LTS), so we implement an advisory lock on a sidecar
- * `.lock` file using PID + timestamp. Same idea as the senai plugin's
- * project-wide lock: non-blocking, stale-aware.
- *
- * Semantics:
- *   - Acquisition is an exclusive-create write (`flag: "wx"`) — the OS
- *     guarantees only ONE process wins, so there is no read-then-write
- *     TOCTOU race (the pre-"wx" implementation had one).
- *   - `withFileLock(lockPath, fn, { staleMs })` returns null immediately if
- *     another live process holds the lock.
- *   - If the lock is stale (PID dead OR older than `staleMs`, default 30 s),
- *     it is stolen and the exclusive create is retried exactly once.
- *   - The lock is released in `finally` after `fn` resolves or rejects.
- *
- * Not used for readers-vs-writers coordination (we use a single exclusive
- * lock for both). Render-time reads are fast enough that serializing them
- * does not hurt the 300 ms status-line budget.
- */
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { dirname } from "node:path";
@@ -58,10 +36,6 @@ function isLockStale(lock: LockContent, staleMs: number): boolean {
 	return false;
 }
 
-/**
- * Exclusive-create the lock file. Returns false when it already exists —
- * the OS-level atomicity is what makes this race-free, not the JSON.
- */
 function tryCreateLock(lockPath: string, owned: LockContent): boolean {
 	try {
 		writeFileSync(lockPath, JSON.stringify(owned), { flag: "wx" });
@@ -78,17 +52,11 @@ function releaseLock(lockPath: string, owned: LockContent): void {
 			unlinkSync(lockPath);
 		}
 	} catch {
-		// Best effort. A crashed process leaves a stale lock that will be
-		// stolen on the next acquire after `staleMs`.
+		
+		
 	}
 }
 
-/**
- * Runs `fn` while holding an exclusive advisory lock on `lockPath`.
- *
- * Non-blocking. Returns null immediately if another live process holds the
- * lock. The lock is released in `finally` regardless of `fn`'s outcome.
- */
 export async function withFileLock<T>(
 	lockPath: string,
 	fn: () => Promise<T>,
@@ -106,20 +74,20 @@ export async function withFileLock<T>(
 		acquiredAt: Date.now(),
 	};
 
-	// Fast path: the lock is free and we win the exclusive create outright.
+	
 	if (!tryCreateLock(lockPath, owned)) {
-		// Lock file exists — live holder or stale?
+		
 		const existing = readLock(lockPath);
 		if (existing && !isLockStale(existing, staleMs)) {
-			return null; // another live process holds it
+			return null; 
 		}
-		// Stale (dead PID, expired age, or unparseable): steal it and retry
-		// the exclusive create exactly once. Losing that retry means another
-		// process stole it first — their problem now.
+		
+		
+		
 		try {
 			unlinkSync(lockPath);
 		} catch {
-			// already gone
+			
 		}
 		if (!tryCreateLock(lockPath, owned)) {
 			return null;

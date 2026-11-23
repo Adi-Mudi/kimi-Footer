@@ -6,15 +6,16 @@ Guidance for AI sessions working in this directory.
 
 - `kimi.plugin.json` — plugin manifest (manifest field reference: kimi-code Plugins doc)
 - `src/` — TypeScript source modules. Mostly pure; one I/O exception noted below.
-  - `types.ts` — shared interfaces (`QuotaData`, `CacheFile`, `QuotaCache`, `StatusLinePayload`, `GitInfo`)
+  - `types.ts` — shared interfaces (`QuotaData`, `RequestQuotaData`, `QuotaCache`, `StatusLinePayload`, `GitInfo`)
   - `quota-cache.ts` — quota cache file read/write (lock-protected at call sites; atomic tmp+rename writes)
   - `file-lock.ts` — `withFileLock` advisory file lock helper (exclusive-create `wx` acquisition, no TOCTOU)
   - `git-cache.ts` — mtime-keyed git cache (`.git/HEAD` + `.git/index` mtimes + maxAge). Atomic tmp+rename writes. Never TTL-only.
-  - `model-detect.ts` — pure model-name detectors (`isKimiModel` / `isMinimaxModel`). No I/O. The only model-detection import allowed in `bin/`.
-  - `helpers.ts` — bar / pace / color formatting (port of pi-footer `helpers.ts`)
-  - `label-blink.ts` — pure ANSI blink helpers (`BLINK_QUARTER_PERIOD_MS`, `pickBlinkPhase`, `formatKimiLabel`, `formatWorktreeMarker`). Imports only from `./types.js`.
+  - `model-detect.ts` — pure model-name detectors (`isKimiModel` / `isMinimaxModel`) + provider-alias resolution (`parseModelAlias`, `resolveActiveProviderId`, `KNOWN_PROVIDER_PREFIXES`). No I/O. The only model-detection import allowed in `bin/`.
+  - `helpers.ts` — pace-color + statusFg + formatRemaining (no bars, no pace-hours text)
+  - `label-blink.ts` — pure ANSI blink helpers (`BLINK_QUARTER_PERIOD_MS`, `pickBlinkPhase`, `formatProviderLabel`, `formatBlinkingSegment`, `formatWorktreeMarker`). Imports only from `./types.js`.
   - `kimi-fetcher.ts` — Kimi API fetch + module-level `currentData`
   - `minimax-fetcher.ts` — MiniMax Coding Plan fetch + module-level `currentData`, auto-region
+  - `providers.ts` — provider registry (`QuotaProvider` entries wrapping the fetchers, each declaring `aliasPrefixes`). Hook-side only: `bin/` must not import it (it transitively pulls the fetchers' credential reads) — the render resolves prefixes via the pure `KNOWN_PROVIDER_PREFIXES` table instead. To add a provider, see its header doc.
   - `git-footer.ts` — git branch + dirty count. ONE bounded `git --no-optional-locks status --porcelain=v2 --branch` subprocess on mtime-cache miss (300 ms timeout). Worktree detection reads `.git` directly (no subprocess). Branch prefers kimi-code's stdin `gitBranch`.
   - `sunset-dir.ts` — sunset gradient folder styling
   - `width.ts` — terminal width detection
@@ -47,7 +48,7 @@ The five hard rules below are enforced by `test/architecture.test.ts`. Do not vi
 
 1. **Render is read-only.** `bin/render-row1.ts` must not call `fetch`, must not write files, must not spawn subprocesses itself. It reads the quota cache, the stdin payload, and the mtime-keyed git cache only.
 2. **Hooks do I/O.** `hooks/refresh-cache.ts` may call APIs, write caches, block up to 30 s. It is the only layer that talks to Kimi/MiniMax.
-3. **`bin/` must not import the fetcher modules.** The fetchers read `auth.json` at module init; importing even a pure function from them pulls the credential read into every render. Model detection comes from `src/model-detect.ts` only.
+3. **`bin/` must not import the fetcher modules.** The fetchers read `auth.json` at module init; importing even a pure function from them pulls the credential read into every render. Model detection comes from `src/model-detect.ts` only. The same applies to the provider registry `src/providers.ts`, which imports the fetchers.
 4. **Source modules stay pure — except the cache/git modules.** Anything in `src/` (except `src/quota-cache.ts`, `src/git-cache.ts`, `src/file-lock.ts`, `src/git-footer.ts`) must not import `node:fs`, `node:child_process`, or `fetch`. `src/git-footer.ts` spawns ONE bounded git subprocess on mtime-cache miss by design.
 5. **Skills and commands are markdown only.** No executable code lives under `skills/` or `commands/`.
 
@@ -68,7 +69,7 @@ $XDG_RUNTIME_DIR/
           ▼
 bin/render-row1.ts  ──(read)──▶  quota-cache  (read-only)
           │
-          ├─▶  src/label-blink.ts  ──(formatKimiLabel)──▶  Kimi label blink
+          ├─▶  src/label-blink.ts  ──(formatProviderLabel)──▶  Kimi label blink
           │
           └─▶  src/git-footer.ts  ──(live)──▶  git status --porcelain | wc -l
                                                        git rev-parse --abbrev-ref HEAD

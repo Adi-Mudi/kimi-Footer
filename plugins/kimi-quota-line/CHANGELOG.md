@@ -2,6 +2,62 @@
 
 All notable changes to kimi-quota-line are recorded here. Format follows [keep-a-changelog](https://keepachangelog.com/).
 
+## Unreleased — right-zone redesign (issue #2)
+
+### Changed
+- Right zone: short provider + FULL model + per-provider metrics (locked mockup)
+- Short labels: Kimi, MM, OCG, OR, OR2, CP (pad width 4, two-space gaps)
+- Kimi/MM/OCG: `W:%` + `5H:%` (never `5R`); OR/OR2: `Req: used/limit`; CP: identity only
+- Model name never truncated; narrow drop order: metrics → folder → never model
+- Gateway wrong-subscription guard (bare override only kimi ↔ minimax)
+
+### Added
+- `src/openrouter-fetcher.ts` (daily free_model_daily_requests)
+- `src/opencode-go-fetcher.ts` (weekly + rolling percent)
+- `src/cline-fetcher.ts` (identity only until usage API found)
+
+### Fixed
+- Rule 8: comments stripped from shipped TS
+
+### Removed (legacy format)
+- Bar glyphs `▮`/`▯`, `vbar()`, `pct()`, `formatTokens()`, `usageColor()`
+- Pace-hours text helpers: `formatPaceHours`, `weeklyPaceHours`, `sessionPaceHours`
+- Unused `CacheFile` interface
+- Stale docs naming `formatKimiLabel` / bar-glyph right zone
+
+## Unreleased — Provider-aware matching + blinking provider fallback
+
+### Fixed
+
+- **Wrong-subscription fetch**: quota bars followed the MODEL NAME only, so a Kimi model served by a different provider (e.g. cline) fetched Kimi-official usage with the kimi-coding key. Provider resolution now runs payload prefix → cached SessionStart alias → bare-name detection; an UNKNOWN prefix (cline) never falls through to bare-name bars.
+- The SessionStart hook payload's `model` is a model OBJECT (`{provider, model}`); the hook now normalizes it into a `provider/name` cache alias instead of nulling it.
+- The heartbeat no longer overwrites the cached model alias with null every 60 s (its payload has no model field) — the SessionStart signal survives.
+
+### Added
+
+- **`(provider) model` fallback with an always-blinking provider segment** — models whose provider has no fetchable detail (e.g. Kimi via cline) show `formatBlinkingSegment("(provider)")` + dim model name on the shared 4-phase clock (dim ↔ same-width blank, width never shifts, no red phase). No provider prefix anywhere keeps the v1 dim-name fallback. Combined visible width capped at 24 (name shortened first, provider segment only if it alone exceeds the cap).
+- `src/model-detect.ts`: `parseModelAlias` (model object / `prefix/name` / bare), `resolveActiveProviderId`, `KNOWN_PROVIDER_PREFIXES`; `src/providers.ts`: `aliasPrefixes` per entry + `providerForAliasPrefix`.
+
+### Tests
+
+- `test/provider-alias.test.ts` (21): alias parsing, prefix resolution, registry/pure-table sync, the cline wrong-bars guard end-to-end, blink phase + width stability, truncation caps, and hook subprocess runs proving SessionStart normalization + heartbeat preservation.
+
+## Unreleased — Model-name fallback + provider registry
+
+### Added
+
+- **Model-name fallback**: when the session model matches no provider (not Kimi, not MiniMax), row 1's right side now shows the model name (dim, truncated at 24 chars with `…`) instead of nothing. Empty model keeps the old no-right-zone behavior. No fetching happens for unmatched models.
+- **Provider registry** (`src/providers.ts`): `hooks/refresh-cache.ts` iterates `PROVIDERS` instead of importing the two fetchers directly. Written cache JSON stays byte-identical (kimi then minimax, `Promise.allSettled` concurrency unchanged; SessionStart fast-path untouched). Adding a provider = 4 documented touch points (fetcher file, registry entry, `QuotaCache` field, one label branch) — core render/hook logic untouched.
+
+### Changed
+
+- `test/render-row1.test.ts` "unknown model" case migrated from asserting `undefined` to asserting the dim name — it pinned the pre-fallback behavior this release supersedes.
+
+### Tests
+
+- `test/providers.test.ts` (5): registry order, fetcher wrapping (function identity), cache-key mapping, detector delegation, heartbeat assembly key order.
+- `test/model-fallback.test.ts` (10): dim name, 24-char boundary + ellipsis, empty model, compact mode, Kimi regression guard, `buildRow1` three-column layout, 80-col width budget, empty-model layout.
+
 ## Unreleased — Pace hours printed as hours + minutes
 
 ### Changed

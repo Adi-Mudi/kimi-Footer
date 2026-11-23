@@ -1,0 +1,117 @@
+{
+  "version": "1.0.0",
+  "updated": "2026-11-23",
+  "routing": {
+    "captain": "own-model",
+    "worker": "own-model",
+    "reviewer": "captain-model-on-other-cli"
+  },
+  "spawn": {
+    "start_timeout_ms": "240000"
+  },
+  "fleet": {
+    "captains": [
+      {
+        "id": "C1",
+        "cli": "<spawnable-cli>",
+        "model": "<provider>/<model>",
+        "workers": [
+          "W1",
+          "W2"
+        ]
+      }
+    ],
+    "workers": [
+      {
+        "id": "W1",
+        "cli": "<spawnable-cli>",
+        "model": "<provider>/<model>"
+      },
+      {
+        "id": "W2",
+        "cli": "<spawnable-cli>",
+        "model": "<provider>/<model>"
+      }
+    ]
+  },
+  "reviewers": {
+    "by_stage": {
+      "stage-plan": [
+        {
+          "id": "R1",
+          "cli": "<spawnable-cli>",
+          "model": "<provider>/<model>",
+          "family": "<model-family>",
+          "required": true
+        }
+      ],
+      "implementation": [
+        {
+          "id": "R1",
+          "cli": "<spawnable-cli>",
+          "model": "<provider>/<model>",
+          "family": "<model-family>",
+          "required": true
+        }
+      ],
+      "design": [
+        {
+          "id": "R1",
+          "cli": "<spawnable-cli>",
+          "model": "<provider>/<model>",
+          "family": "<model-family>",
+          "required": true
+        }
+      ]
+    },
+    "stage_gate": {
+      "min_reviewers": 1,
+      "max_reviewers": 3,
+      "error_above": 3
+    }
+  },
+  "fallback": {
+    "pool": [
+      {
+        "cli": "<spawnable-cli>",
+        "model": "<provider>/<model>"
+      }
+    ],
+    "decision": "pm-or-developer",
+    "auto": false
+  },
+  "labels": {
+    "initiative": [
+      "initiative:sequence-upgrade",
+      "initiative:right-zone-redesign"
+    ],
+    "type": [
+      "type:workflow"
+    ],
+    "priority": [
+      "priority:P1",
+      "priority:P2",
+      "priority:P3",
+      "priority:P4",
+      "priority:P5",
+      "priority:P6",
+      "priority:P7",
+      "priority:P8"
+    ],
+    "stage": [
+      "stage:planned",
+      "stage:discussion",
+      "stage:ready",
+      "stage:implementing",
+      "stage:done"
+    ],
+    "area": [
+      "area:rules",
+      "area:store",
+      "area:skills",
+      "area:docs",
+      "area:tests",
+      "area:config"
+    ]
+  }
+}

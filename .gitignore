@@ -21,3 +21,11 @@ dist/
 # Plans live only in this repo, never tracked
 .IDE_Plans/
 .freebuff
+.foundation_version
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# SQLite projection DB (rebuilt from streams; only db-store branch may snapshot)
+store/

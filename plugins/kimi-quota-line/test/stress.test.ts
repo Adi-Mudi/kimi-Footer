@@ -1,13 +1,3 @@
-/**
- * Stress tests — kimi-style regression checks.
- *
- * 1. 300 ms status-line budget: 100 sequential render-row1 spawns; assert p99 < 300 ms.
- * 2. Concurrent hook safety: 10 parallel refresh-cache spawns; assert all exit 0 and cache file is valid JSON.
- * 3. Cache TTL: a stale cache (>90 s old) is detectable via isCacheStale().
- *
- * Run with: pnpm run stress
- */
-
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -32,7 +22,7 @@ describe("300 ms status-line budget", () => {
 
 	beforeEach(() => {
 		tmpDir = makeTmpDir();
-		// Pre-seed the cache so render-row1 has real work.
+		
 		const cache: QuotaCache = {
 			ts: Date.now(),
 			model: "kimi-for-coding",
@@ -58,8 +48,8 @@ describe("300 ms status-line budget", () => {
 		const N = 100;
 		const latencies: number[] = [];
 
-		// Use the plugin dir as cwd so the per-render git call succeeds and
-		// reflects a realistic small-repo scenario.
+		
+		
 		const pluginDir = join(PLUGIN_ROOT);
 
 		for (let i = 0; i < N; i++) {
@@ -84,7 +74,7 @@ describe("300 ms status-line budget", () => {
 			});
 			const elapsed = performance.now() - start;
 			expect(result.status).toBe(0);
-			expect(elapsed).toBeLessThan(800); // hard cap: any single run must be < 800 ms
+			expect(elapsed).toBeLessThan(800); 
 			latencies.push(elapsed);
 		}
 
@@ -93,9 +83,9 @@ describe("300 ms status-line budget", () => {
 		const p99 = latencies[Math.floor(N * 0.99)];
 		const max = latencies[N - 1];
 
-		// v1.2: render-row1 calls git directly per render. Added ~30-100 ms.
-		// Hard ceiling still well below 800 ms; kimi-code cap is 300 ms but
-		// we leave a 200 ms buffer here for system noise.
+		
+		
+		
 		expect(p99).toBeLessThan(500);
 		expect(p50).toBeLessThan(350);
 		console.log(`  p50=${p50.toFixed(1)}ms  p99=${p99.toFixed(1)}ms  max=${max.toFixed(1)}ms`);
@@ -134,7 +124,7 @@ describe("concurrent hook safety", () => {
 
 		const cachePath = join(tmpDir, "kimi-quota-line-quota-cache.json");
 		expect(existsSync(cachePath)).toBe(true);
-		// File must be valid JSON (not half-written / corrupted).
+		
 		const cache = JSON.parse(readFileSync(cachePath, "utf-8"));
 		expect(typeof cache.ts).toBe("number");
 	});
@@ -154,7 +144,7 @@ describe("cache TTL detection", () => {
 
 	it("detects stale cache older than maxAgeMs", () => {
 		const cache: QuotaCache = {
-			ts: Date.now() - 90_000, // 90 s ago
+			ts: Date.now() - 90_000, 
 			model: "kimi-for-coding",
 			kimi: null,
 			minimax: null,
@@ -200,12 +190,12 @@ describe("concurrent cache write safety (withFileLock)", () => {
 
 		const results = await Promise.all(promises);
 
-		// All spawns must exit 0 (fail-open per Kimi Hooks doc).
+		
 		for (const r of results) {
 			expect(r.status).toBe(0);
 		}
 
-		// The quota cache file must exist and be valid JSON (no torn write).
+		
 		const cachePath = join(tmpDir, "kimi-quota-line-quota-cache.json");
 		expect(existsSync(cachePath)).toBe(true);
 		const cache = JSON.parse(readFileSync(cachePath, "utf-8"));
@@ -213,13 +203,13 @@ describe("concurrent cache write safety (withFileLock)", () => {
 		expect(cache).toHaveProperty("kimi");
 		expect(cache).toHaveProperty("minimax");
 
-		// v1.3.1: refresh-cache no longer writes a git cache. Git data is
-		// read live on every render via `git status`. The git cache file
-		// must NOT exist anymore.
+		
+		
+		
 		const gitPath = join(tmpDir, "kimi-quota-line-git-cache.json");
 		expect(existsSync(gitPath)).toBe(false);
 
-		// Lock file must be cleaned up after the write finishes.
+		
 		expect(existsSync(`${cachePath}.lock`)).toBe(false);
 	}, 15_000);
 });

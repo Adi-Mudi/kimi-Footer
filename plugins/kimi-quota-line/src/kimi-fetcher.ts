@@ -1,15 +1,3 @@
-/**
- * Kimi API usage fetcher — keeps cached data and exposes current values.
- * Ported from 01_pi-Footer/.pi/extensions/pi-footer/kimi-fetcher.ts.
- *
- * Adaptations for kimi-code CLI:
- *   - Drops `import type { Model }` from @earendil-works/pi-coding-agent.
- *   - isKimiModel() accepts a plain string (id or name).
- *   - Reads auth.json from $KIMI_CODE_HOME instead of $PI_CODING_AGENT_DIR.
- *
- * No runtime behavior change: endpoint URL, token loader, response parsing,
- * error handling, and the cached shape match pi-footer exactly.
- */
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -24,9 +12,6 @@ interface KimiUsageResponse {
 	}>;
 }
 
-/**
- * Retrieves the Kimi API token from auth.json or environment variables.
- */
 export function getKimiToken(): string | null {
 	try {
 		const agentDir = process.env.KIMI_CODE_HOME || join(homedir(), ".kimi-code");
@@ -47,9 +32,6 @@ export function getKimiData(): QuotaData | null {
 	return currentData;
 }
 
-/**
- * Extracts the reset timestamp from a usage data object.
- */
 function getResetAt(data: Record<string, unknown> | undefined): string | undefined {
 	if (!data) return undefined;
 	const keys = ["reset_at", "resetAt", "reset_time", "resetTime"];
@@ -60,14 +42,8 @@ function getResetAt(data: Record<string, unknown> | undefined): string | undefin
 	return undefined;
 }
 
-// Model detection moved verbatim to src/model-detect.ts so bin/render-row1.ts
-// never loads this module (which reads auth.json at init). Re-exported for
-// backwards compatibility with hooks + existing tests.
 export { isKimiModel } from "./model-detect.js";
 
-/**
- * Fetches Kimi usage and caches it. Never throws.
- */
 export async function fetchKimiUsage(): Promise<void> {
 	if (!TOKEN) return;
 	try {
