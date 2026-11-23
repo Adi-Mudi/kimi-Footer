@@ -97,15 +97,21 @@ async function main(): Promise<void> {
 		...emptyCacheSlots(),
 		sessions: existing?.sessions,
 	};
+	const keyStatus: Record<string, "ok" | "key" | "api"> = {};
 	for (const p of PROVIDERS) {
 		const key = p.cacheKey;
 		const data = p.getData();
 		if (data !== null && data !== undefined) {
 			cache[key] = data as never;
-		} else if (existing) {
-			cache[key] = (existing as unknown as Record<string, unknown>)[key] as never;
+			keyStatus[p.aliasPrefixes[0] ?? p.id] = "ok";
+		} else {
+			if (existing) {
+				cache[key] = (existing as unknown as Record<string, unknown>)[key] as never;
+			}
+			keyStatus[p.aliasPrefixes[0] ?? p.id] = "key";
 		}
 	}
+	cache.keyStatus = keyStatus;
 
 	try {
 		await withFileLock(QUOTA_LOCK_PATH, async () => {

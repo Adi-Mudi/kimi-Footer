@@ -89,6 +89,13 @@ function metricsFor(
 	return undefined;
 }
 
+function errBadge(providerId: string, cache: QuotaCache | null): string | undefined {
+	const st = cache?.keyStatus?.[providerId];
+	if (st === "key") return statusFg("error", "Err:key");
+	if (st === "api") return statusFg("warning", "Err:api");
+	return undefined;
+}
+
 export function buildRightZone(
 	payloadModel: string,
 	cache: QuotaCache | null,
@@ -103,7 +110,10 @@ export function buildRightZone(
 	const model = fullModelName(payloadModel, cache?.model ?? null);
 	if (!short && !model) return undefined;
 
-	const metrics = withMetrics ? metricsFor(providerId, cache) : undefined;
+	let metrics = withMetrics ? metricsFor(providerId, cache) : undefined;
+	if (!metrics && withMetrics && providerId) {
+		metrics = errBadge(providerId, cache);
+	}
 
 	if (!short) {
 		return metrics ? `${dim(model)}  ${metrics}` : dim(model);

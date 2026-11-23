@@ -37,6 +37,7 @@ export interface QuotaCache {
 	opencodeGo?: QuotaData | null;
 	cline?: QuotaData | null;
 	sessions?: Record<string, SessionEntry>;
+	keyStatus?: Record<string, "ok" | "key" | "api">;
 }
 
 export interface StatusLinePayload {

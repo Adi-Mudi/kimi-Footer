@@ -25,6 +25,11 @@ All notable changes to kimi-quota-line are recorded here. Format follows [keep-a
 - Status-line resolves provider via `resolveForSession` (session model > global)
 - Kimi/MM token fallback: `auth.json` → `auth.json.reset` → env
 
+### Added (key-error badges - D9)
+- `Err:key` red when provider key missing/invalid and no metrics
+- `Err:api` amber when quota API down and no cached metrics
+- `QuotaCache.keyStatus` written by heartbeat hook
+
 ### Removed (legacy format)
 - Bar glyphs `▮`/`▯`, `vbar()`, `pct()`, `formatTokens()`, `usageColor()`
 - Pace-hours text helpers: `formatPaceHours`, `weeklyPaceHours`, `sessionPaceHours`

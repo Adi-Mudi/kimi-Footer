@@ -321,3 +321,37 @@ describe("buildRow1 edge cases", () => {
 		);
 	});
 });
+
+describe("key error badges", () => {
+	const base = (keyStatus: QuotaCache["keyStatus"]): QuotaCache => ({
+		ts: Date.now(),
+		model: "kimi-k3.1-pro",
+		kimi: null,
+		minimax: null,
+		keyStatus,
+	});
+
+	it("shows Err:key when keyStatus is key and no metrics", () => {
+		const line = strip(buildRightZone("kimi-k3.1-pro", base({ "kimi-code": "key" }), true, 0) ?? "");
+		expect(line).toContain("Err:key");
+		expect(line).toContain("kimi-k3.1-pro");
+	});
+
+	it("shows Err:api when keyStatus is api and no metrics", () => {
+		const line = strip(buildRightZone("kimi-k3.1-pro", base({ "kimi-code": "api" }), true, 0) ?? "");
+		expect(line).toContain("Err:api");
+	});
+
+	it("does not show Err when metrics present", () => {
+		const cache: QuotaCache = {
+			ts: Date.now(),
+			model: "kimi-k3.1-pro",
+			kimi: { wUsed: 67, wLimit: 100, wResetAt: undefined, hUsed: 20, hLimit: 100, hResetAt: undefined, hRemaining: "" },
+			minimax: null,
+			keyStatus: { "kimi-code": "ok" },
+		};
+		const line = strip(buildRightZone("kimi-k3.1-pro", cache, true, 0) ?? "");
+		expect(line).toContain("W:67%");
+		expect(line).not.toContain("Err:");
+	});
+});
