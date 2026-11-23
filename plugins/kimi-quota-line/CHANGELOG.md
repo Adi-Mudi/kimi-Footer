@@ -6,8 +6,8 @@ All notable changes to kimi-quota-line are recorded here. Format follows [keep-a
 
 ### Changed
 - Right zone: short provider + FULL model + per-provider metrics (locked mockup)
-- Short labels: Kimi, MM, OCG, OR, OR2, CP (pad width 4, two-space gaps)
-- Kimi/MM/OCG: `W:%` + `5H:%` (never `5R`); OR/OR2: `Req: used/limit`; CP: identity only
+- Short labels: Kimi, MM, OPC-G, OR, OR2, CL-P (pad width 4, two-space gaps)
+- Kimi/MM/OPC-G: `W:%` + `5H:%` (never `5R`); OR/OR2: `Req: used/limit`; CP: identity only
 - Model name never truncated; narrow drop order: metrics → folder → never model
 - Gateway wrong-subscription guard (bare override only kimi ↔ minimax)
 

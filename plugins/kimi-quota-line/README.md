@@ -7,16 +7,16 @@ A Kimi Code CLI status-line plugin that replaces the first footer line with a su
 ```
 ›› my-project   main • 3 files   Kimi  kimi-k3.1-pro  W:67%  5H:20%
                                  MM    minimax-m3     W:31%  5H:25%
-                                 OCG   mimo-v2.6-flash  W:7%  5H:3%
+                                 OPC-G mimo-v2.6-flash  W:7%  5H:3%
                                  OR    anthropic/claude-opus-4.8  Req: 42/1000
                                  OR2   openai/gpt-6-sol  Req: 254/1000
-                                 CP    cline-pass/muse-spark-1.3
+                                 CL-P  cline-pass/muse-spark-1.3
 ```
 
 Three columns on the first row:
 - **Left**: sunset-gradient folder (`›› <folder>`)
 - **Center**: git details — branch in cyan bold, `[wt]` marker in worktrees **blinking** cyan → off → amber (shared 4-phase clock), dim ` • ` separator, bright-red blinking dirty count (`N files`) or `clean`
-- **Right**: short provider + FULL model + metrics — Kimi/MM/OCG `W:%` `5H:%`; OR/OR2 `Req: used/limit`; CP identity only; two-space gaps; model never truncated
+- **Right**: short provider + FULL model + metrics — Kimi/MM/OPC-G `W:%` `5H:%`; OR/OR2 `Req: used/limit`; CP identity only; two-space gaps; model never truncated
 
 The bottom row is kimi-code's built-in (context %, session id, version). **kimi-quota-line only replaces the top row.**
 

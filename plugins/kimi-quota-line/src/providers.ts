@@ -67,7 +67,7 @@ export const opencodeGoProvider: QuotaProvider = {
 	fetch: fetchOpenCodeGoUsage,
 	getData: getOpenCodeGoData,
 	aliasPrefixes: ["opencode-go"],
-	shortLabel: "OCG",
+	shortLabel: "OPC-G",
 };
 
 export const clineProvider: QuotaProvider = {
@@ -77,7 +77,7 @@ export const clineProvider: QuotaProvider = {
 	fetch: fetchClineUsage,
 	getData: getClineData,
 	aliasPrefixes: ["cline-pass"],
-	shortLabel: "CP",
+	shortLabel: "CL-P",
 };
 
 export const PROVIDERS: readonly QuotaProvider[] = [

@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { withFileLock } from "../src/file-lock.js";
 
 import { QUOTA_LOCK_PATH, readQuotaCache, writeQuotaCache } from "../src/quota-cache.js";
@@ -47,6 +50,26 @@ function emptyCacheSlots(): Omit<QuotaCache, "ts" | "model"> {
 	};
 }
 
+
+function buildModelIndex(): Record<string, string> {
+	const index: Record<string, string> = {};
+	try {
+		const dir = process.env.KIMI_CODE_HOME || join(homedir(), ".kimi-code");
+		const raw = readFileSync(join(dir, "config.toml"), "utf-8");
+		const blocks = raw.match(/\[models\."[^"]+"\][\s\S]*?(?=\n\[models\.|\n\[providers\.|$)/g) || [];
+		for (const block of blocks) {
+			const prov = block.match(/provider\s*=\s*"([^"]+)"/)?.[1];
+			if (!prov) continue;
+			const display = block.match(/display_name\s*=\s*"([^"]+)"/)?.[1];
+			const modelId = block.match(/\bmodel\s*=\s*"([^"]+)"/)?.[1];
+			if (display && !index[display]) index[display] = prov;
+			if (modelId && !index[modelId]) index[modelId] = prov;
+		}
+	} catch {
+	}
+	return index;
+}
+
 async function main(): Promise<void> {
 	const payload = await readStdin();
 	const alias = parseModelAlias(payload.model);
@@ -77,6 +100,7 @@ async function main(): Promise<void> {
 			opencodeGo: existing?.opencodeGo ?? null,
 			cline: existing?.cline ?? null,
 			sessions,
+			modelIndex: buildModelIndex(),
 		};
 		try {
 			await withFileLock(QUOTA_LOCK_PATH, async () => {
@@ -96,6 +120,7 @@ async function main(): Promise<void> {
 		model: normalized ?? existing?.model ?? null,
 		...emptyCacheSlots(),
 		sessions: existing?.sessions,
+		modelIndex: buildModelIndex(),
 	};
 	const keyStatus: Record<string, "ok" | "key" | "api"> = {};
 	for (const p of PROVIDERS) {

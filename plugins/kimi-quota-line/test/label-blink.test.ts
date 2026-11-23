@@ -37,8 +37,8 @@ describe("formatProviderLabel", () => {
 		expect(strip(formatProviderLabel("MM", 0))).toBe("MM  ");
 	});
 
-	it("pads OCG to width 4", () => {
-		expect(strip(formatProviderLabel("OCG", 0))).toBe("OCG ");
+	it("keeps OPC-G at natural width 5", () => {
+		expect(strip(formatProviderLabel("OPC-G", 0))).toBe("OPC-G");
 	});
 
 	it("pads OR to width 4", () => {
@@ -49,8 +49,8 @@ describe("formatProviderLabel", () => {
 		expect(strip(formatProviderLabel("OR2", 0))).toBe("OR2 ");
 	});
 
-	it("pads CP to width 4", () => {
-		expect(strip(formatProviderLabel("CP", 0))).toBe("CP  ");
+	it("keeps CL-P at natural width 4", () => {
+		expect(strip(formatProviderLabel("CL-P", 0))).toBe("CL-P");
 	});
 
 	it("Kimi blinks: dim at phase 0", () => {
@@ -71,7 +71,7 @@ describe("formatProviderLabel", () => {
 	});
 
 	it("non-Kimi labels stay static dim across phases", () => {
-		for (const short of ["MM", "OCG", "OR", "OR2", "CP"]) {
+		for (const short of ["MM", "OPC-G", "OR", "OR2", "CL-P"]) {
 			const a = formatProviderLabel(short, 0);
 			const b = formatProviderLabel(short, Q);
 			const c = formatProviderLabel(short, Q * 2);

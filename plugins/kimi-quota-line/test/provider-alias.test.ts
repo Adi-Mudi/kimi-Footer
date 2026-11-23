@@ -74,10 +74,10 @@ describe("resolveProviderId + short labels", () => {
 	it("maps short labels for locked design", () => {
 		expect(shortLabelFor("kimi-code")).toBe("Kimi");
 		expect(shortLabelFor("minimax")).toBe("MM");
-		expect(shortLabelFor("opencode-go")).toBe("OCG");
+		expect(shortLabelFor("opencode-go")).toBe("OPC-G");
 		expect(shortLabelFor("openrouter")).toBe("OR");
 		expect(shortLabelFor("openrouter-2")).toBe("OR2");
-		expect(shortLabelFor("cline-pass")).toBe("CP");
+		expect(shortLabelFor("cline-pass")).toBe("CL-P");
 		expect(shortLabelFor(null)).toBeNull();
 	});
 
@@ -152,20 +152,20 @@ describe("resolveActiveProviderId", () => {
 });
 
 describe("buildRightZone end-to-end", () => {
-	it("cline-pass session serving a kimi-named model -> CP + full model, NO wrong metrics", () => {
+	it("cline-pass session serving a kimi-named model -> CL-P + full model, NO wrong metrics", () => {
 		const line = buildRightZone("cline-pass/kimi-k2", kimiCache("cline-pass/kimi-k2"), true, 0);
 		const visible = strip(line ?? "");
-		expect(visible).toContain("CP");
+		expect(visible).toContain("CL-P");
 		expect(visible).toContain("kimi-k2");
 		expect(visible).not.toContain("W:");
 		expect(visible).not.toContain("5H:");
 		expect(visible).not.toContain("%");
 	});
 
-	it("bare kimi name under cline-pass cache stays on CP (wrong-subscription guard)", () => {
+	it("bare kimi name under cline-pass cache stays on CL-P (wrong-subscription guard)", () => {
 		const line = buildRightZone("kimi-k2", kimiCache("cline-pass/kimi-k2"), true, 0);
 		const visible = strip(line ?? "");
-		expect(visible).toContain("CP");
+		expect(visible).toContain("CL-P");
 		expect(visible).toContain("kimi-k2");
 		expect(visible).not.toContain("W:");
 		expect(visible).not.toContain("Kimi");
@@ -222,5 +222,37 @@ describe("resolveForSession", () => {
 			sessions: { s1: { model: "openrouter/openai/gpt-6-sol", provider: "openrouter", updatedAt: 1 } },
 		};
 		expect(resolveForSession("kimi-k3.1-pro", cache, "s1")).toBe("openrouter");
+	});
+});
+
+describe("resolveForSession modelIndex", () => {
+	const cache = {
+		model: "opencode-go/mimo-v2.6-flash",
+		sessions: {},
+		modelIndex: {
+			"Nemotron 3 Ultra (free)": "openrouter",
+			"nvidia/nemotron-3-ultra-550b-a55b:free": "openrouter",
+			"mimo-v2.6-flash": "opencode-go",
+		},
+	};
+
+	it("maps display name to provider even when global is different", () => {
+		expect(resolveForSession("Nemotron 3 Ultra (free)", cache, null)).toBe("openrouter");
+	});
+
+	it("maps model id to provider", () => {
+		expect(resolveForSession("nvidia/nemotron-3-ultra-550b-a55b:free", cache, null)).toBe("openrouter");
+	});
+
+	it("session still wins over modelIndex", () => {
+		const c = {
+			...cache,
+			sessions: { s1: { model: "openrouter-2/x", provider: "openrouter-2", updatedAt: 1 } },
+		};
+		expect(resolveForSession("Nemotron 3 Ultra (free)", c, "s1")).toBe("openrouter-2");
+	});
+
+	it("payload prefix wins over modelIndex", () => {
+		expect(resolveForSession("cline-pass/muse", cache, null)).toBe("cline-pass");
 	});
 });

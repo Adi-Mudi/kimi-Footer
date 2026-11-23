@@ -106,9 +106,9 @@ describe("locked right-zone mockup", () => {
 		expect(line).toMatch(/^MM {4}minimax-m3 {2}W:\d+% {2}5H:\d+%$/);
 	});
 
-	it("OCG row", () => {
+	it("OPC-G row", () => {
 		const line = strip(buildRightZone("opencode-go/mimo-v2.6-flash", ocgCache(), true, 0) ?? "");
-		expect(line).toMatch(/^OCG {3}mimo-v2\.6-flash {2}W:7% {2}5H:3%$/);
+		expect(line).toMatch(/^OPC-G {2}mimo-v2\.6-flash {2}W:7% {2}5H:3%$/);
 	});
 
 	it("OR row", () => {
@@ -123,9 +123,9 @@ describe("locked right-zone mockup", () => {
 		expect(line).toMatch(/^OR2 {3}openai\/gpt-6-sol {2}Req: 254\/1000$/);
 	});
 
-	it("CP row has no metrics", () => {
+	it("CL-P row has no metrics", () => {
 		const line = strip(buildRightZone("cline-pass/cline-pass/muse-spark-1.3", null, true, 0) ?? "");
-		expect(line).toMatch(/^CP {4}cline-pass\/muse-spark-1\.3$/);
+		expect(line).toMatch(/^CL-P {2}cline-pass\/muse-spark-1\.3$/);
 		expect(line).not.toContain("W:");
 		expect(line).not.toContain("5H:");
 		expect(line).not.toContain("Req:");

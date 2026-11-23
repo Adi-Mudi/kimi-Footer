@@ -36,10 +36,10 @@ export const KNOWN_PROVIDER_PREFIXES: readonly string[] = [
 export const SHORT_LABELS: Readonly<Record<string, string>> = {
 	"kimi-code": "Kimi",
 	minimax: "MM",
-	"opencode-go": "OCG",
+	"opencode-go": "OPC-G",
 	openrouter: "OR",
 	"openrouter-2": "OR2",
-	"cline-pass": "CP",
+	"cline-pass": "CL-P",
 };
 
 export const SHORT_LABEL_WIDTH = 4;
@@ -137,7 +137,7 @@ export function sessionCacheModel(
 
 export function resolveForSession(
 	payloadModel: string,
-	cache: { model?: string | null; sessions?: Record<string, { model: string | null; provider?: string | null; updatedAt?: number }> } | null | undefined,
+	cache: { model?: string | null; sessions?: Record<string, { model: string | null; provider?: string | null; updatedAt?: number }>; modelIndex?: Record<string, string> } | null | undefined,
 	sessionId: string | null | undefined,
 ): string | null {
 	const a = parseModelAlias(payloadModel);
@@ -153,6 +153,11 @@ export function resolveForSession(
 			if (sid) return sid;
 		}
 		return resolveActiveProviderId(payloadModel, fromSession);
+	}
+	const idxProvider = cache?.modelIndex?.[a.name || payloadModel] ?? cache?.modelIndex?.[payloadModel];
+	if (idxProvider) {
+		const pid = resolveProviderId(idxProvider);
+		if (pid) return pid;
 	}
 	return resolveActiveProviderId(payloadModel, cache?.model ?? null);
 }

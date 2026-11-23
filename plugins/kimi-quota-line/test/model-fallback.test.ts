@@ -75,9 +75,9 @@ describe("buildRightZone metrics", () => {
 		expect(line).toContain("W:67%  5H:20%");
 	});
 
-	it("CP shows short + model only (no metrics)", () => {
+	it("CL-P shows short + model only (no metrics)", () => {
 		const line = strip(buildRightZone("cline-pass/cline-pass/muse-spark-1.3", null, true, 0) ?? "");
-		expect(line).toContain("CP");
+		expect(line).toContain("CL-P");
 		expect(line).toContain("cline-pass/muse-spark-1.3");
 		expect(line).not.toContain("W:");
 		expect(line).not.toContain("Req:");
@@ -114,7 +114,7 @@ describe("buildRightZone metrics", () => {
 		expect(line).toContain("Req: 254/1000");
 	});
 
-	it("OCG shows W and 5H from percent cache", () => {
+	it("OPC-G shows W and 5H from percent cache", () => {
 		const cache: QuotaCache = {
 			ts: 0,
 			model: "opencode-go/mimo-v2.6-flash",
@@ -131,7 +131,7 @@ describe("buildRightZone metrics", () => {
 			},
 		};
 		const line = strip(buildRightZone("opencode-go/mimo-v2.6-flash", cache, true, 0) ?? "");
-		expect(line).toContain("OCG");
+		expect(line).toContain("OPC-G");
 		expect(line).toContain("mimo-v2.6-flash");
 		expect(line).toContain("W:7%");
 		expect(line).toContain("5H:3%");

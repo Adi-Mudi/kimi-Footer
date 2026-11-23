@@ -258,7 +258,7 @@ async function main(): Promise<void> {
 		contextUsage: partial.contextUsage ?? 0,
 		contextTokens: partial.contextTokens ?? 0,
 		maxContextTokens: partial.maxContextTokens ?? 0,
-		sessionId: partial.sessionId ?? "",
+		sessionId: partial.sessionId ?? (partial as { session_id?: string }).session_id ?? "",
 		version: partial.version ?? "",
 	};
 

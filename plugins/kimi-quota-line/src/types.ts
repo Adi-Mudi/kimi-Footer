@@ -38,6 +38,7 @@ export interface QuotaCache {
 	cline?: QuotaData | null;
 	sessions?: Record<string, SessionEntry>;
 	keyStatus?: Record<string, "ok" | "key" | "api">;
+	modelIndex?: Record<string, string>;
 }
 
 export interface StatusLinePayload {

@@ -45,8 +45,8 @@ describe("provider registry", () => {
 		expect(minimaxProvider.shortLabel).toBe("MM");
 		expect(openrouterProvider.shortLabel).toBe("OR");
 		expect(openrouter2Provider.shortLabel).toBe("OR2");
-		expect(opencodeGoProvider.shortLabel).toBe("OCG");
-		expect(clineProvider.shortLabel).toBe("CP");
+		expect(opencodeGoProvider.shortLabel).toBe("OPC-G");
+		expect(clineProvider.shortLabel).toBe("CL-P");
 	});
 
 	it("aliasPrefixes cover all known prefixes", () => {
