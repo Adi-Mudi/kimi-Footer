@@ -20,8 +20,8 @@ describe("formatRemaining", () => {
 });
 
 describe("statusFg", () => {
-	it("uses theme text for success and emits truecolor ANSI + reset for warning and error", () => {
-		expect(statusFg("success", "x")).toBe("x");
+	it("emits dim theme #6e7681 for success and truecolor ANSI + reset for warning and error", () => {
+		expect(statusFg("success", "x")).toBe("\x1b[38;2;110;118;129mx\x1b[39m");
 		expect(statusFg("warning", "x")).toBe("\x1b[38;2;224;168;0mx\x1b[39m");
 		expect(statusFg("error", "x")).toBe("\x1b[38;2;220;53;69mx\x1b[39m");
 	});

@@ -78,8 +78,8 @@ export function formatRemaining(resetAt?: string | number): string {
 }
 
 export function statusFg(status: StatusColor, text: string): string {
-	if (status === "success") return text;
-	const CODE: Record<Exclude<StatusColor, "success">, string> = {
+	const CODE: Record<StatusColor, string> = {
+		success: "\x1b[38;2;110;118;129m",
 		warning: "\x1b[38;2;224;168;0m",
 		error: "\x1b[38;2;220;53;69m",
 	};
