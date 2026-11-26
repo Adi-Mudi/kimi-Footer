@@ -87,6 +87,28 @@ function orCache(used = 42, limit = 1000, which: "openrouter" | "openrouter2" = 
 	};
 }
 
+function clineCache(overrides: Partial<NonNullable<QuotaCache["cline"]>> = {}): QuotaCache {
+	return {
+		ts: 0,
+		model: "cline-pass/cline-pass/muse-spark-1.3",
+		kimi: null,
+		minimax: null,
+		cline: {
+			mUsed: 42,
+			mLimit: 100,
+			mResetAt: new Date(Date.now() + 20 * 86_400_000).toISOString(),
+			wUsed: 18,
+			wLimit: 100,
+			wResetAt: new Date(Date.now() + 4 * 86_400_000).toISOString(),
+			hUsed: 7,
+			hLimit: 100,
+			hResetAt: new Date(Date.now() + 2 * 3_600_000).toISOString(),
+			hRemaining: "",
+			...overrides,
+		},
+	};
+}
+
 const wideTerminal = 140;
 const dirtyGit: GitInfo = {
 	branch: "main",
@@ -123,12 +145,66 @@ describe("locked right-zone mockup", () => {
 		expect(line).toMatch(/^OR2 {3}openai\/gpt-6-sol {2}Req: 254\/1000$/);
 	});
 
-	it("CL-P row has no metrics", () => {
+	it("CL-P row has no metrics when cache or cline is null", () => {
 		const line = strip(buildRightZone("cline-pass/cline-pass/muse-spark-1.3", null, true, 0) ?? "");
 		expect(line).toMatch(/^CL-P {2}cline-pass\/muse-spark-1\.3$/);
+		expect(line).not.toContain("M:");
 		expect(line).not.toContain("W:");
 		expect(line).not.toContain("5H:");
 		expect(line).not.toContain("Req:");
+
+		const nullClineCache: QuotaCache = {
+			ts: 0,
+			model: "cline-pass/cline-pass/muse-spark-1.3",
+			kimi: null,
+			minimax: null,
+			cline: null,
+		};
+		const withCache = strip(buildRightZone("cline-pass/cline-pass/muse-spark-1.3", nullClineCache, true, 0) ?? "");
+		expect(withCache).toMatch(/^CL-P {2}cline-pass\/muse-spark-1\.3$/);
+	});
+
+	it("CL-P with m/w/h shows M -> W -> 5H", () => {
+		const line = strip(buildRightZone("cline-pass/cline-pass/muse-spark-1.3", clineCache(), true, 0) ?? "");
+		expect(line).toMatch(/^CL-P {2}cline-pass\/muse-spark-1\.3 {2}M:42% {2}W:18% {2}5H:7%$/);
+	});
+
+	it("CL-P omits windows whose limit is 0", () => {
+		const noWeekly = strip(
+			buildRightZone(
+				"cline-pass/cline-pass/muse-spark-1.3",
+				clineCache({ wUsed: 0, wLimit: 0, wResetAt: undefined }),
+				true,
+				0,
+			) ?? "",
+		);
+		expect(noWeekly).toMatch(/^CL-P {2}cline-pass\/muse-spark-1\.3 {2}M:42% {2}5H:7%$/);
+
+		const noFiveHour = strip(
+			buildRightZone(
+				"cline-pass/cline-pass/muse-spark-1.3",
+				clineCache({ hUsed: 0, hLimit: 0, hResetAt: undefined }),
+				true,
+				0,
+			) ?? "",
+		);
+		expect(noFiveHour).toMatch(/^CL-P {2}cline-pass\/muse-spark-1\.3 {2}M:42% {2}W:18%$/);
+	});
+
+	it("CL-P mUsed=100 is red/error and raw < 100 never rounds up to 100%", () => {
+		const rawLine = buildRightZone(
+			"cline-pass/cline-pass/muse-spark-1.3",
+			clineCache({ mUsed: 100, mLimit: 100, mResetAt: new Date(Date.now() + 28 * 86_400_000).toISOString() }),
+			true,
+			0,
+		) ?? "";
+		expect(rawLine).toContain("\x1b[38;2;220;53;69mM:100%\x1b[39m");
+
+		const nearFull = strip(
+			buildRightZone("cline-pass/cline-pass/muse-spark-1.3", clineCache({ mUsed: 99.6, mLimit: 100 }), true, 0) ?? "",
+		);
+		expect(nearFull).toContain("M:99%");
+		expect(nearFull).not.toContain("M:100%");
 	});
 
 	it("never uses 5R label", () => {

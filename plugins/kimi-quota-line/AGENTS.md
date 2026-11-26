@@ -16,6 +16,7 @@ Guidance for AI sessions working in this directory.
   - `kimi-fetcher.ts` — Kimi API fetch + module-level `currentData`. Monthly: `usages.limit_month_total` / `limit_month_code` (`used_ratio` → `mUsed`/`mLimit=100`).
   - `minimax-fetcher.ts` — MiniMax Coding Plan fetch + module-level `currentData`, auto-region (5H + weekly only; no monthly yet)
   - `opencode-go-fetcher.ts` — OpenCode Go usage (rolling/weekly/monthly percent meters). Monthly kept when `usage.monthly.percent` is a number.
+  - `cline-fetcher.ts` — Cline Pass usage-limits fetch (`https://api.cline.bot/api/v1/users/me/plan/usage-limits` via `readProviderApiKey("cline-pass")`) + module-level `currentData` (monthly/weekly/five_hour `percentUsed` + `resetsAt`, 4 s timeout, 60 s cooldown).
   - `providers.ts` — provider registry (`QuotaProvider` entries wrapping the fetchers, each declaring `aliasPrefixes`). Hook-side only: `bin/` must not import it (it transitively pulls the fetchers' credential reads) — the render resolves prefixes via the pure `KNOWN_PROVIDER_PREFIXES` table instead. To add a provider, see its header doc.
   - `git-footer.ts` — git branch + dirty count. ONE bounded `git --no-optional-locks status --porcelain=v2 --branch` subprocess on mtime-cache miss (300 ms timeout). Worktree detection reads `.git` directly (no subprocess). Branch prefers kimi-code's stdin `gitBranch`.
   - `sunset-dir.ts` — sunset gradient folder styling

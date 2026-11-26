@@ -2,6 +2,14 @@
 
 All notable changes to kimi-quota-line are recorded here. Format follows [keep-a-changelog](https://keepachangelog.com/).
 
+## Unreleased — CL-P (Cline Pass) usage-limits quota
+
+### Added
+- `src/cline-fetcher.ts` fetches `https://api.cline.bot/api/v1/users/me/plan/usage-limits` using `readProviderApiKey("cline-pass")` (4 s timeout, 60 s cooldown on 401/403/404/429/bad JSON, `percentUsed` clamped 0–100, missing windows omitted)
+- `bin/render-row1.ts` renders `CL-P` metrics (`M:%` → `W:%` → `5H:%`) from `cache.cline`, hides windows with `limit <= 0`, and prevents `usedPct` from rounding `< 100%` up to `100%`
+- `src/helpers.ts` parses date-only `YYYY-MM-DD`, ISO datetime, and epoch seconds/milliseconds in `hoursUntilReset`, enforces `"error"` first when usage is `>= 100%`, and clamps elapsed hours into `[0, windowHours]`
+- `test/cline-fetcher.test.ts` covering three-window parsing, omitted weekly window, 429 cooldown, `percentUsed` clamping, and `AbortSignal.timeout` handling
+
 ## Unreleased — monthly quota (M:)
 
 ### Added
