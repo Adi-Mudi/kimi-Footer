@@ -6,6 +6,32 @@ per release.
 
 ---
 
+## v1.3.5-clinepass — 2026-11-27 — CL-P quota, /model switch & ZAI
+
+**Tag**: `v1.3.5-clinepass` · **Branch**: `dev` · **PRs**: #4, #5, #6, #7
+
+### Highlights
+
+- **PR #4 (`feat/cline-pass-quota`) — CL-P usage-limits metrics (`M:%` → `W:%` → `5H:%`):**
+  - `src/cline-fetcher.ts` fetches `https://api.cline.bot/api/v1/users/me/plan/usage-limits` (4 s timeout, 60 s cooldown on 401/403/404/429/bad JSON, `percentUsed` clamped 0–100, missing windows omitted).
+  - `src/helpers.ts` parses date-only `YYYY-MM-DD`, ISO datetime, and epoch seconds/ms in `hoursUntilReset`, enforces `"error"` first at `>= 100%`, and clamps elapsed hours into `[0, windowHours]`.
+  - `bin/render-row1.ts` renders `CL-P` metrics (`M:%` → `W:%` → `5H:%`) gated by `limit > 0` and caps `< 100%` rounding at `99%`.
+- **PR #5 (`fix/model-switch-stale-provider`) — Dynamic `/model` switch resolution:**
+  - `resolveForSession` ignores stale `sessions[sid]` when `payload.model` bare/tail name differs and never falls back to stale `cache.model` on `modelIndex` miss; case-insensitive `modelIndex` lookup.
+  - `buildModelIndex` strips `^managed:` and indexes section key, `display_name`, and `model` ID; `refresh-cache` updates `sessions[sid]` on any hook carrying `session_id` + `model`.
+- **PR #6 (`fix/unknown-provider-label`) — Unknown-prefix guard + `ZAI` + matrix/contract tests:**
+  - Rejects unknown provider prefixes (`zai/`, `zaa/`, `zhipu/`, `kilo/`) before `modelIndex` lookup so colliding `display_name`s never hijack `OR` `Req:`, while preserving exact `vendor/model` ID hits.
+  - Registers `zai-coding-plan` → `ZAI` in `KNOWN_PROVIDER_PREFIXES`, `SHORT_LABELS`, and `PROVIDERS`.
+  - Adds sanitized 5-provider `test/fixtures/config.sample.toml` and `test/provider-contract.test.ts` (golden matrix, `[providers.*]`/`[models.*]` contract, subprocess E2E).
+- **PR #7 (`fix/theme-success-color`) — Dim theme `#6e7681` success color:**
+  - `statusFg("success")` emits dim theme `#6e7681` (`\x1b[38;2;110;118;129m`), keeping amber warning and red error.
+
+### Verification
+
+- typecheck PASS · build PASS · unit 243/243 (15/15 files; `git-footer.test.ts` excluded for global `core.hooksPath`) · stress 5/5
+
+---
+
 ## v1.3.4-monthly — 2026-11-26 — Monthly quota (M:)
 
 **Tag**: `v1.3.4-monthly` · **Branch**: `dev` · **PR**: #3
