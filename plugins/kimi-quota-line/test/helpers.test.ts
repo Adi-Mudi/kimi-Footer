@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	formatRemaining,
 	hoursUntilReset,
+	monthlyPaceColor,
 	sessionPaceColor,
 	statusFg,
 	weeklyPaceColor,
@@ -33,6 +34,19 @@ describe("weeklyPaceColor", () => {
 		expect(weeklyPaceColor(10, 100, soon)).toBe("success");
 		expect(weeklyPaceColor(85, 100, soon)).toBe("warning");
 		expect(weeklyPaceColor(100, 100, soon)).toBe("error");
+	});
+});
+
+describe("monthlyPaceColor", () => {
+	it("uses simple percent inside grace period", () => {
+		const soon = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+		expect(monthlyPaceColor(10, 100, soon)).toBe("success");
+		expect(monthlyPaceColor(85, 100, soon)).toBe("warning");
+		expect(monthlyPaceColor(100, 100, soon)).toBe("error");
+	});
+
+	it("returns success for zero limit", () => {
+		expect(monthlyPaceColor(0, 0)).toBe("success");
 	});
 });
 

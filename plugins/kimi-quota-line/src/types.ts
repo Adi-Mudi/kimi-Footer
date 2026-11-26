@@ -6,6 +6,9 @@ export interface QuotaData {
 	hLimit: number;
 	hResetAt: string | undefined;
 	hRemaining: string;
+	mUsed?: number;
+	mLimit?: number;
+	mResetAt?: string | undefined;
 }
 
 export interface RequestQuotaData {

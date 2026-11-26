@@ -2,6 +2,16 @@
 
 All notable changes to kimi-quota-line are recorded here. Format follows [keep-a-changelog](https://keepachangelog.com/).
 
+## Unreleased — monthly quota (M:)
+
+### Added
+- Optional monthly fields on `QuotaData`: `mUsed` / `mLimit` / `mResetAt`
+- Kimi fetcher parses `usages.limit_month_total` / `limit_month_code` (`used_ratio`)
+- OpenCode Go fetcher keeps `usage.monthly` meter (was discarded)
+- `monthlyPaceColor` (720 h window, 24 h grace)
+- Right-zone order when monthly present: `M:%` → `W:%` → `5H:%`; `M:` hidden when absent
+- OpenRouter / MiniMax / CL-P unchanged (no monthly source yet)
+
 ## Unreleased — right-zone redesign (issue #2)
 
 ### Changed

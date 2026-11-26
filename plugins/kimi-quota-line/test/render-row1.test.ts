@@ -142,6 +142,37 @@ describe("locked right-zone mockup", () => {
 			expect(strip(l)).toContain("5H:");
 		}
 	});
+
+	it("Kimi with monthly shows M before W before 5H", () => {
+		const cache = kimiCache();
+		cache.kimi = {
+			...cache.kimi!,
+			mUsed: 45,
+			mLimit: 100,
+			mResetAt: new Date(Date.now() + 20 * 86_400_000).toISOString(),
+		};
+		const line = strip(buildRightZone("kimi-k3.1-pro", cache, true, 0) ?? "");
+		expect(line).toMatch(/^Kimi {2}kimi-k3\.1-pro {2}M:45% {2}W:\d+% {2}5H:\d+%$/);
+	});
+
+	it("OPC-G with monthly shows M before W before 5H", () => {
+		const cache = ocgCache();
+		cache.opencodeGo = {
+			...cache.opencodeGo!,
+			mUsed: 50,
+			mLimit: 100,
+			mResetAt: new Date(Date.now() + 10 * 86_400_000).toISOString(),
+		};
+		const line = strip(buildRightZone("opencode-go/mimo-v2.6-flash", cache, true, 0) ?? "");
+		expect(line).toMatch(/^OPC-G {2}mimo-v2\.6-flash {2}M:50% {2}W:7% {2}5H:3%$/);
+	});
+
+	it("omits M when monthly fields are absent", () => {
+		const kimiLine = strip(buildRightZone("kimi-k3.1-pro", kimiCache(), true, 0) ?? "");
+		expect(kimiLine).not.toContain("M:");
+		const mmLine = strip(buildRightZone("minimax/minimax-m3", minimaxCache(), true, 0) ?? "");
+		expect(mmLine).not.toContain("M:");
+	});
 });
 
 describe("buildRow1", () => {
