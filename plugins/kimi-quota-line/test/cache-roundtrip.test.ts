@@ -119,6 +119,81 @@ describe("refresh-cache", () => {
 		expect(after.ts).toBeGreaterThan(prior.ts);
 		expect(after.model).toBe("kimi-for-coding");
 	});
+
+	it("buildModelIndex strips managed: and indexes section key, display_name, and model id", () => {
+		writeFileSync(
+			join(tmpDir, "config.toml"),
+			[
+				'[models."managed:kimi-code/k3"]',
+				'provider = "managed:kimi-code"',
+				'model = "k3"',
+				'display_name = "K3"',
+				"",
+				'[models."opencode-go/mimo-v2.6-flash"]',
+				'provider = "opencode-go"',
+				'model = "mimo-v2.6-flash"',
+				'display_name = "MiMo-V2.6-Flash"',
+			].join("\n"),
+		);
+
+		const result = spawnSync("node", [REFRESH], {
+			env: envWith(tmpDir),
+			input: JSON.stringify({
+				hook_event_name: "SessionStart",
+				session_id: "sess_idx",
+				model: { provider: "managed:kimi-code", model: "k3" },
+			}),
+			encoding: "utf-8",
+			timeout: 5_000,
+		});
+
+		expect(result.status).toBe(0);
+		const cache = JSON.parse(readFileSync(join(tmpDir, "kimi-quota-line-quota-cache.json"), "utf-8"));
+		expect(cache.modelIndex).toEqual({
+			"managed:kimi-code/k3": "kimi-code",
+			K3: "kimi-code",
+			k3: "kimi-code",
+			"opencode-go/mimo-v2.6-flash": "opencode-go",
+			"MiMo-V2.6-Flash": "opencode-go",
+			"mimo-v2.6-flash": "opencode-go",
+		});
+	});
+
+	it("updates sessions[sid] on non-SessionStart hook carrying session_id + model", () => {
+		const cachePath = join(tmpDir, "kimi-quota-line-quota-cache.json");
+		writeFileSync(
+			cachePath,
+			JSON.stringify({
+				ts: Date.now() - 10_000,
+				model: "cline-pass/cline-pass/muse-spark-1.3",
+				kimi: null,
+				minimax: null,
+				sessions: {
+					sess_hb: {
+						model: "cline-pass/cline-pass/muse-spark-1.3",
+						provider: "cline-pass",
+						updatedAt: Date.now() - 10_000,
+					},
+				},
+			}),
+		);
+
+		const result = spawnSync("node", [REFRESH], {
+			env: envWith(tmpDir),
+			input: JSON.stringify({
+				hook_event_name: "SessionHeartbeat",
+				session_id: "sess_hb",
+				model: { provider: "opencode-go", model: "mimo-v2.6-flash" },
+			}),
+			encoding: "utf-8",
+			timeout: 15_000,
+		});
+
+		expect(result.status).toBe(0);
+		const after = JSON.parse(readFileSync(cachePath, "utf-8"));
+		expect(after.sessions.sess_hb.provider).toBe("opencode-go");
+		expect(after.sessions.sess_hb.model).toBe("opencode-go/mimo-v2.6-flash");
+	});
 });
 
 describe("render-row1", () => {

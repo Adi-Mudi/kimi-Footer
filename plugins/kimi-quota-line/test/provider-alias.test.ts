@@ -162,8 +162,12 @@ describe("buildRightZone end-to-end", () => {
 		expect(visible).not.toContain("%");
 	});
 
-	it("bare kimi name under cline-pass cache stays on CL-P (wrong-subscription guard)", () => {
-		const line = buildRightZone("kimi-k2", kimiCache("cline-pass/kimi-k2"), true, 0);
+	it("bare kimi name under cline-pass session stays on CL-P (wrong-subscription guard)", () => {
+		const cache: QuotaCache = {
+			...kimiCache("cline-pass/kimi-k2"),
+			sessions: { s1: { model: "cline-pass/kimi-k2", provider: "cline-pass", updatedAt: 1 } },
+		};
+		const line = buildRightZone("kimi-k2", cache, true, 0, "s1");
 		const visible = strip(line ?? "");
 		expect(visible).toContain("CL-P");
 		expect(visible).toContain("kimi-k2");
@@ -197,7 +201,7 @@ describe("buildRightZone end-to-end", () => {
 });
 
 describe("resolveForSession", () => {
-	it("uses session model over global cache", () => {
+	it("uses matching session model and never falls back to stale cache.model on miss", () => {
 		const cache = {
 			model: "kimi-code/kimi-k3.1-pro",
 			sessions: {
@@ -205,7 +209,7 @@ describe("resolveForSession", () => {
 			},
 		};
 		expect(resolveForSession("gpt-6-sol", cache, "s1")).toBe("openrouter");
-		expect(resolveForSession("gpt-6-sol", cache, "missing")).toBe("kimi-code");
+		expect(resolveForSession("gpt-6-sol", cache, "missing")).toBeNull();
 	});
 
 	it("payload prefix wins over session", () => {
@@ -216,12 +220,79 @@ describe("resolveForSession", () => {
 		expect(resolveForSession("openrouter-2/openai/gpt-6-sol", cache, "s1")).toBe("openrouter-2");
 	});
 
-	it("bare kimi overrides foreign gateway session is NOT applied when session exists", () => {
+	it("ignores stale session when mid-session switch changes model to bare kimi name", () => {
 		const cache = {
 			model: "openrouter/openai/gpt-6-sol",
 			sessions: { s1: { model: "openrouter/openai/gpt-6-sol", provider: "openrouter", updatedAt: 1 } },
 		};
-		expect(resolveForSession("kimi-k3.1-pro", cache, "s1")).toBe("openrouter");
+		expect(resolveForSession("kimi-k3.1-pro", cache, "s1")).toBe("kimi-code");
+	});
+
+	it("mid-session switch from CL-P to bare display name resolves via case-insensitive modelIndex", () => {
+		const cache: QuotaCache = {
+			ts: 0,
+			model: "cline-pass/cline-pass/muse-spark-1.3",
+			kimi: null,
+			minimax: null,
+			cline: {
+				mUsed: 40,
+				mLimit: 100,
+				mResetAt: undefined,
+				wUsed: 10,
+				wLimit: 100,
+				wResetAt: undefined,
+				hUsed: 5,
+				hLimit: 100,
+				hResetAt: undefined,
+				hRemaining: "",
+			},
+			opencodeGo: {
+				wUsed: 7,
+				wLimit: 100,
+				wResetAt: undefined,
+				hUsed: 3,
+				hLimit: 100,
+				hResetAt: undefined,
+				hRemaining: "",
+			},
+			sessions: {
+				s1: { model: "cline-pass/cline-pass/muse-spark-1.3", provider: "cline-pass", updatedAt: 1 },
+			},
+			modelIndex: {
+				"mimo-v2.6-flash": "opencode-go",
+			},
+		};
+		expect(resolveForSession("MiMo-V2.6-Flash", cache, "s1")).toBe("opencode-go");
+		const visible = strip(buildRightZone("MiMo-V2.6-Flash", cache, true, 0, "s1") ?? "");
+		expect(visible).toContain("OPC-G");
+		expect(visible).toContain("W:7%");
+		expect(visible).not.toContain("CL-P");
+	});
+
+	it("never falls back to stale cache.model when switched to unknown model", () => {
+		const cache = {
+			model: "cline-pass/cline-pass/muse-spark-1.3",
+			sessions: {
+				s1: { model: "cline-pass/cline-pass/muse-spark-1.3", provider: "cline-pass", updatedAt: 1 },
+			},
+			modelIndex: {
+				"mimo-v2.6-flash": "opencode-go",
+			},
+		};
+		expect(resolveForSession("some-unknown-model", cache, "s1")).toBeNull();
+	});
+
+	it("double-prefix session matches bare tail and prefixed forms, rejects unknown prefix", () => {
+		const cache = {
+			model: "cline-pass/cline-pass/muse-spark-1.3",
+			sessions: {
+				s1: { model: "cline-pass/cline-pass/muse-spark-1.3", provider: "cline-pass", updatedAt: 1 },
+			},
+		};
+		expect(resolveForSession("muse-spark-1.3", cache, "s1")).toBe("cline-pass");
+		expect(resolveForSession("cline-pass/muse-spark-1.3", cache, "s1")).toBe("cline-pass");
+		expect(resolveForSession("cline-pass/cline-pass/muse-spark-1.3", cache, "s1")).toBe("cline-pass");
+		expect(resolveForSession("kilo/kimi-k2", cache, "s1")).toBeNull();
 	});
 });
 
@@ -230,26 +301,35 @@ describe("resolveForSession modelIndex", () => {
 		model: "opencode-go/mimo-v2.6-flash",
 		sessions: {},
 		modelIndex: {
-			"Nemotron 3 Ultra (free)": "openrouter",
+			"Nemotron 3 Ultra (free)": "managed:openrouter",
 			"nvidia/nemotron-3-ultra-550b-a55b:free": "openrouter",
 			"mimo-v2.6-flash": "opencode-go",
 		},
 	};
 
-	it("maps display name to provider even when global is different", () => {
+	it("maps display name case-insensitively and strips managed:", () => {
 		expect(resolveForSession("Nemotron 3 Ultra (free)", cache, null)).toBe("openrouter");
+		expect(resolveForSession("nemotron 3 ultra (free)", cache, null)).toBe("openrouter");
 	});
 
 	it("maps model id to provider", () => {
 		expect(resolveForSession("nvidia/nemotron-3-ultra-550b-a55b:free", cache, null)).toBe("openrouter");
 	});
 
-	it("session still wins over modelIndex", () => {
-		const c = {
+	it("ignores stale session on different model, keeps matching session over modelIndex", () => {
+		const stale = {
 			...cache,
 			sessions: { s1: { model: "openrouter-2/x", provider: "openrouter-2", updatedAt: 1 } },
 		};
-		expect(resolveForSession("Nemotron 3 Ultra (free)", c, "s1")).toBe("openrouter-2");
+		expect(resolveForSession("Nemotron 3 Ultra (free)", stale, "s1")).toBe("openrouter");
+
+		const matching = {
+			...cache,
+			sessions: {
+				s1: { model: "openrouter-2/Nemotron 3 Ultra (free)", provider: "openrouter-2", updatedAt: 1 },
+			},
+		};
+		expect(resolveForSession("Nemotron 3 Ultra (free)", matching, "s1")).toBe("openrouter-2");
 	});
 
 	it("payload prefix wins over modelIndex", () => {

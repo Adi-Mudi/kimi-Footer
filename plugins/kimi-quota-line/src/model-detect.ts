@@ -135,6 +135,52 @@ export function sessionCacheModel(
 	return model;
 }
 
+function tailName(name: string): string {
+	const idx = name.lastIndexOf("/");
+	return idx >= 0 ? name.slice(idx + 1) : name;
+}
+
+function sameModelName(a: string, b: string): boolean {
+	const aa = parseModelAlias(a).name.trim().toLowerCase();
+	const bb = parseModelAlias(b).name.trim().toLowerCase();
+	if (!aa || !bb) return false;
+	if (aa === bb) return true;
+	const ta = tailName(aa);
+	const tb = tailName(bb);
+	return Boolean(ta && tb && ta === tb);
+}
+
+function lookupModelIndex(
+	modelIndex: Record<string, string> | undefined,
+	payloadModel: string,
+	parsedName: string,
+): string | null {
+	if (!modelIndex) return null;
+	const candidates = [parsedName, payloadModel, tailName(parsedName || payloadModel)]
+		.map((s) => s.trim())
+		.filter(Boolean);
+	for (const key of candidates) {
+		const exact = modelIndex[key];
+		if (exact) {
+			const pid = resolveProviderId(exact.replace(/^managed:/, ""));
+			if (pid) return pid;
+		}
+	}
+	const lowerMap = new Map<string, string>();
+	for (const [k, v] of Object.entries(modelIndex)) {
+		const lk = k.trim().toLowerCase();
+		if (lk && !lowerMap.has(lk)) lowerMap.set(lk, v);
+	}
+	for (const key of candidates) {
+		const hit = lowerMap.get(key.toLowerCase());
+		if (hit) {
+			const pid = resolveProviderId(hit.replace(/^managed:/, ""));
+			if (pid) return pid;
+		}
+	}
+	return null;
+}
+
 export function resolveForSession(
 	payloadModel: string,
 	cache: { model?: string | null; sessions?: Record<string, { model: string | null; provider?: string | null; updatedAt?: number }>; modelIndex?: Record<string, string> } | null | undefined,
@@ -146,7 +192,7 @@ export function resolveForSession(
 		if (pid) return pid;
 	}
 	const fromSession = sessionCacheModel(cache, sessionId);
-	if (fromSession) {
+	if (fromSession && !a.provider && sameModelName(payloadModel, fromSession)) {
 		const s = parseModelAlias(fromSession);
 		if (s.provider) {
 			const sid = resolveProviderId(s.provider);
@@ -154,10 +200,8 @@ export function resolveForSession(
 		}
 		return resolveActiveProviderId(payloadModel, fromSession);
 	}
-	const idxProvider = cache?.modelIndex?.[a.name || payloadModel] ?? cache?.modelIndex?.[payloadModel];
-	if (idxProvider) {
-		const pid = resolveProviderId(idxProvider);
-		if (pid) return pid;
-	}
-	return resolveActiveProviderId(payloadModel, cache?.model ?? null);
+	const idxPid = lookupModelIndex(cache?.modelIndex, payloadModel, a.name);
+	if (idxPid) return idxPid;
+	if (a.provider) return null;
+	return bareNameProviderId(payloadModel);
 }

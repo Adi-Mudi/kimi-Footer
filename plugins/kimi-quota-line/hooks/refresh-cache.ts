@@ -56,39 +56,71 @@ function buildModelIndex(): Record<string, string> {
 	try {
 		const dir = process.env.KIMI_CODE_HOME || join(homedir(), ".kimi-code");
 		const raw = readFileSync(join(dir, "config.toml"), "utf-8");
-		const blocks = raw.match(/\[models\."[^"]+"\][\s\S]*?(?=\n\[models\.|\n\[providers\.|$)/g) || [];
-		for (const block of blocks) {
-			const prov = block.match(/provider\s*=\s*"([^"]+)"/)?.[1];
-			if (!prov) continue;
-			const display = block.match(/display_name\s*=\s*"([^"]+)"/)?.[1];
-			const modelId = block.match(/\bmodel\s*=\s*"([^"]+)"/)?.[1];
+		let inModels = false;
+		let sectionKey: string | undefined;
+		let prov = "";
+		let display: string | undefined;
+		let modelId: string | undefined;
+		const flush = (): void => {
+			if (!inModels || !prov) return;
+			if (sectionKey && !index[sectionKey]) index[sectionKey] = prov;
 			if (display && !index[display]) index[display] = prov;
 			if (modelId && !index[modelId]) index[modelId] = prov;
+		};
+		for (const line of raw.split(/\r?\n/)) {
+			const header = line.match(/^\[([^\]]+)\]/);
+			if (header) {
+				flush();
+				const mKey = header[1].match(/^models\.(?:"([^"]+)"|'([^']+)'|(.+))$/);
+				inModels = Boolean(mKey);
+				sectionKey = mKey ? (mKey[1] ?? mKey[2] ?? mKey[3]) : undefined;
+				prov = "";
+				display = undefined;
+				modelId = undefined;
+				continue;
+			}
+			if (!inModels) continue;
+			const p = line.match(/^\s*provider\s*=\s*"([^"]+)"/)?.[1];
+			if (p) prov = p.replace(/^managed:/, "");
+			const d = line.match(/^\s*display_name\s*=\s*"([^"]+)"/)?.[1];
+			if (d) display = d;
+			const m = line.match(/^\s*model\s*=\s*"([^"]+)"/)?.[1];
+			if (m) modelId = m;
 		}
+		flush();
 	} catch {
 	}
 	return index;
+}
+
+function updateSessionsMap(
+	existingSessions: QuotaCache["sessions"],
+	sid: string,
+	provider: string | null,
+	model: string | null,
+	now: number,
+): NonNullable<QuotaCache["sessions"]> {
+	const sessions = { ...(existingSessions ?? {}) };
+	sessions[sid] = { model, provider, updatedAt: now };
+	for (const [k, v] of Object.entries(sessions)) {
+		if (now - (v?.updatedAt ?? 0) > 24 * 60 * 60 * 1000) delete sessions[k];
+	}
+	return sessions;
 }
 
 async function main(): Promise<void> {
 	const payload = await readStdin();
 	const alias = parseModelAlias(payload.model);
 	const normalized = alias.provider && alias.name ? `${alias.provider}/${alias.name}` : alias.name || null;
+	const sid = typeof payload.session_id === "string" && payload.session_id ? payload.session_id : null;
 
 	
 	if (payload.hook_event_name === "SessionStart") {
 		const existing = readQuotaCache();
-		const sid = typeof payload.session_id === "string" && payload.session_id ? payload.session_id : null;
-		const sessions = { ...(existing?.sessions ?? {}) };
 		const now = Date.now();
-		if (sid) {
-			const alias = parseModelAlias(payload.model);
-			const prov = alias.provider ? alias.provider : null;
-			sessions[sid] = { model: normalized, provider: prov, updatedAt: now };
-			for (const [k, v] of Object.entries(sessions)) {
-				if (now - (v?.updatedAt ?? 0) > 24 * 60 * 60 * 1000) delete sessions[k];
-			}
-		}
+		const sessions = sid
+			? updateSessionsMap(existing?.sessions, sid, alias.provider ? alias.provider : null, normalized, now)
+			: { ...(existing?.sessions ?? {}) };
 		const cache: QuotaCache = {
 			ts: now,
 			model: normalized,
@@ -115,11 +147,16 @@ async function main(): Promise<void> {
 	await Promise.allSettled(PROVIDERS.map((p) => p.fetch()));
 
 	const existing = readQuotaCache();
+	const now = Date.now();
+	const sessions =
+		sid && normalized
+			? updateSessionsMap(existing?.sessions, sid, alias.provider ? alias.provider : null, normalized, now)
+			: existing?.sessions;
 	const cache: QuotaCache = {
-		ts: Date.now(),
+		ts: now,
 		model: normalized ?? existing?.model ?? null,
 		...emptyCacheSlots(),
-		sessions: existing?.sessions,
+		sessions,
 		modelIndex: buildModelIndex(),
 	};
 	const keyStatus: Record<string, "ok" | "key" | "api"> = {};
