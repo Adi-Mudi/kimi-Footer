@@ -1,186 +1,87 @@
-/**
- * Pure helper functions for the kimi-quota-line plugin.
- * No TUI imports here — this file is safe to import from unit tests.
- * Verbatim port from 01_pi-Footer/.pi/extensions/pi-footer/helpers.ts.
- */
-import { EMPTY, FILLED } from "./types.js";
-
-/**
- * Formats a token count into a human-readable string with k/M suffixes.
- */
-export function formatTokens(count: number): string {
-	if (count < 1000) return count.toString();
-	if (count < 10000) return `${(count / 1000).toFixed(1)}k`;
-	if (count < 1000000) return `${Math.round(count / 1000)}k`;
-	if (count < 10000000) return `${(count / 1000000).toFixed(1)}M`;
-	return `${Math.round(count / 1000000)}M`;
+function parseResetMs(resetAt?: string | number): number | null {
+	if (resetAt === undefined || resetAt === null || resetAt === "") return null;
+	if (typeof resetAt === "number") {
+		if (!Number.isFinite(resetAt)) return null;
+		return Math.abs(resetAt) < 1e11 ? resetAt * 1000 : resetAt;
+	}
+	const s = resetAt.trim();
+	if (!s) return null;
+	if (/^\d+(\.\d+)?$/.test(s)) {
+		const n = Number(s);
+		if (!Number.isFinite(n)) return null;
+		return n < 1e11 ? n * 1000 : n;
+	}
+	if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+		const ms = Date.parse(`${s}T00:00:00Z`);
+		return Number.isNaN(ms) ? null : ms;
+	}
+	const ms = new Date(s).getTime();
+	return Number.isNaN(ms) ? null : ms;
 }
 
-/**
- * Calculates hours remaining until a reset timestamp.
- */
-export function hoursUntilReset(resetAt?: string): number {
-	if (!resetAt) return 0;
-	try {
-		const resetMs = new Date(resetAt).getTime();
-		if (Number.isNaN(resetMs)) return 0;
-		const diffMs = resetMs - Date.now();
-		if (diffMs <= 0) return 0;
-		return diffMs / (1000 * 60 * 60);
-	} catch {
-		return 0;
-	}
+export function hoursUntilReset(resetAt?: string | number): number {
+	const resetMs = parseResetMs(resetAt);
+	if (resetMs === null) return 0;
+	const diffMs = resetMs - Date.now();
+	if (diffMs <= 0) return 0;
+	return diffMs / (1000 * 60 * 60);
 }
 
 export type StatusColor = "success" | "warning" | "error";
 
-/**
- * Determines weekly bar color based on pace ratio (actual vs expected hourly usage).
- */
-export function weeklyPaceColor(used: number, limit: number, resetAt?: string): StatusColor {
-	const WEEK_HOURS = 168;
-	const GRACE_HOURS = 2;
-	if (limit <= 0) return "success";
-	const actualPercent = (used / limit) * 100;
-	const elapsedHours = WEEK_HOURS - hoursUntilReset(resetAt);
-
-	if (elapsedHours < GRACE_HOURS || elapsedHours >= WEEK_HOURS) {
-		if (actualPercent >= 100) return "error";
-		if (actualPercent >= 80) return "warning";
-		return "success";
-	}
-
-	const expectedPercent = (elapsedHours / WEEK_HOURS) * 100;
-	const paceRatio = (actualPercent / expectedPercent) * 100;
-	if (paceRatio <= 79) return "success";
-	if (paceRatio <= 99) return "warning";
-	return "error";
-}
-
-/**
- * Determines session (5H) bar color based on pace ratio.
- */
-export function sessionPaceColor(used: number, limit: number, resetAt?: string): StatusColor {
-	const WINDOW_HOURS = 5;
-	const GRACE_HOURS = 0.25;
-	if (limit <= 0) return "success";
-	const actualPercent = (used / limit) * 100;
-	const elapsedHours = WINDOW_HOURS - hoursUntilReset(resetAt);
-
-	if (elapsedHours < GRACE_HOURS || elapsedHours >= WINDOW_HOURS) {
-		if (actualPercent >= 100) return "error";
-		if (actualPercent >= 80) return "warning";
-		return "success";
-	}
-
-	const expectedPercent = (elapsedHours / WINDOW_HOURS) * 100;
-	const paceRatio = (actualPercent / expectedPercent) * 100;
-	if (paceRatio <= 79) return "success";
-	if (paceRatio <= 99) return "warning";
-	return "error";
-}
-
-/**
- * Calculates pace delta in hours for the weekly window.
- * Positive = spare hours. Negative = debt. Null when pace cannot be computed.
- */
-export function weeklyPaceHours(used: number, limit: number, resetAt?: string): number | null {
-	return paceHours(used, limit, resetAt, 168, 2);
-}
-
-/**
- * Calculates pace delta in hours for the 5-hour session window.
- */
-export function sessionPaceHours(used: number, limit: number, resetAt?: string): number | null {
-	return paceHours(used, limit, resetAt, 5, 0.25);
-}
-
-function paceHours(
+function paceColor(
 	used: number,
 	limit: number,
-	resetAt: string | undefined,
 	windowHours: number,
 	graceHours: number,
-): number | null {
-	if (limit <= 0) return null;
-	const elapsedHours = windowHours - hoursUntilReset(resetAt);
-	if (elapsedHours < graceHours || elapsedHours >= windowHours) return null;
-	const expectedPercent = (elapsedHours / windowHours) * 100;
+	resetAt?: string | number,
+): StatusColor {
+	if (limit <= 0) return "success";
 	const actualPercent = (used / limit) * 100;
-	return ((expectedPercent - actualPercent) / 100) * windowHours;
-}
+	if (actualPercent >= 100) return "error";
 
-/**
- * Formats pace as hours + minutes (`9h55m`, `-0h47m`, `0h00m`).
- *
- * Whole minutes are derived first, so rounding can never emit a 60-minute
- * field (`1.999` → `2h00m`, never `1h60m`). Near-zero (under 3 minutes of
- * pace) collapses to `0h00m`, so no `-0h00m` artifact can be printed.
- */
-export function formatPaceHours(h: number): string {
-	const totalMin = Math.abs(h) < 0.05 ? 0 : Math.round(Math.abs(h) * 60);
-	const hh = Math.floor(totalMin / 60);
-	const mm = totalMin % 60;
-	const sign = h < 0 && totalMin > 0 ? "-" : "";
-	return `${sign}${hh}h${String(mm).padStart(2, "0")}m`;
-}
+	const elapsedHours = Math.max(0, Math.min(windowHours, windowHours - hoursUntilReset(resetAt)));
 
-/**
- * Status color from simple usage ratio.
- */
-export function usageColor(used: number, limit: number): StatusColor {
-	const p = limit > 0 ? used / limit : 0;
-	if (p > 0.8) return "error";
-	if (p > 0.5) return "warning";
-	return "success";
-}
-
-/**
- * Percentage string from used and limit.
- */
-export function pct(used: number, limit: number): string {
-	if (limit <= 0) return "0%";
-	return `${Math.round((used / limit) * 100)}%`;
-}
-
-/**
- * Builds a vertical block bar string representing usage percentage.
- */
-export function vbar(used: number, limit: number): string {
-	const BAR_SEGMENTS = 10;
-	const p = limit > 0 ? used / limit : 0;
-	const filled = Math.min(BAR_SEGMENTS, Math.max(0, Math.ceil(p * BAR_SEGMENTS)));
-	return FILLED.repeat(filled) + EMPTY.repeat(BAR_SEGMENTS - filled);
-}
-
-/**
- * Formats remaining time until a reset timestamp as "hours.minutes".
- */
-export function formatRemaining(resetAt?: string): string {
-	if (!resetAt) return "?";
-	try {
-		const dt = new Date(resetAt);
-		const resetMs = dt.getTime();
-		if (Number.isNaN(resetMs)) return "?";
-		const diffMs = resetMs - Date.now();
-		if (diffMs <= 0) return "0.00";
-		const totalMinutes = Math.floor(diffMs / 60000);
-		const hours = Math.floor(totalMinutes / 60);
-		const minutes = totalMinutes % 60;
-		return `${hours}.${String(minutes).padStart(2, "0")}`;
-	} catch {
-		return "?";
+	if (elapsedHours < graceHours || elapsedHours >= windowHours) {
+		if (actualPercent >= 80) return "warning";
+		return "success";
 	}
+
+	const expectedPercent = (elapsedHours / windowHours) * 100;
+	const paceRatio = (actualPercent / expectedPercent) * 100;
+	if (paceRatio <= 79) return "success";
+	if (paceRatio <= 99) return "warning";
+	return "error";
 }
 
-/**
- * Fixed traffic-light status colors (truecolor ANSI, theme-independent).
- */
+export function weeklyPaceColor(used: number, limit: number, resetAt?: string | number): StatusColor {
+	return paceColor(used, limit, 168, 2, resetAt);
+}
+
+export function monthlyPaceColor(used: number, limit: number, resetAt?: string | number): StatusColor {
+	return paceColor(used, limit, 720, 24, resetAt);
+}
+
+export function sessionPaceColor(used: number, limit: number, resetAt?: string | number): StatusColor {
+	return paceColor(used, limit, 5, 0.25, resetAt);
+}
+
+export function formatRemaining(resetAt?: string | number): string {
+	const resetMs = parseResetMs(resetAt);
+	if (resetMs === null) return "?";
+	const diffMs = resetMs - Date.now();
+	if (diffMs <= 0) return "0.00";
+	const totalMinutes = Math.floor(diffMs / 60000);
+	const hours = Math.floor(totalMinutes / 60);
+	const minutes = totalMinutes % 60;
+	return `${hours}.${String(minutes).padStart(2, "0")}`;
+}
+
 export function statusFg(status: StatusColor, text: string): string {
 	const CODE: Record<StatusColor, string> = {
-		success: "\x1b[38;2;40;167;69m", // #28a745 green
-		warning: "\x1b[38;2;224;168;0m", // #e0a800 amber
-		error: "\x1b[38;2;220;53;69m", // #dc3545 red
+		success: "\x1b[38;2;110;118;129m",
+		warning: "\x1b[38;2;224;168;0m",
+		error: "\x1b[38;2;220;53;69m",
 	};
 	return `${CODE[status]}${text}\x1b[39m`;
 }

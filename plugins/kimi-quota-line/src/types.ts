@@ -1,8 +1,3 @@
-/**
- * Shared TypeScript interfaces used across src/, hooks/, bin/, and test/.
- */
-
-/** Shape returned by both kimi-fetcher and minimax-fetcher (per pi-footer convention). */
 export interface QuotaData {
 	wUsed: number;
 	wLimit: number;
@@ -11,6 +6,15 @@ export interface QuotaData {
 	hLimit: number;
 	hResetAt: string | undefined;
 	hRemaining: string;
+	mUsed?: number;
+	mLimit?: number;
+	mResetAt?: string | undefined;
+}
+
+export interface RequestQuotaData {
+	used: number;
+	limit: number;
+	resetsAt?: string;
 }
 
 export interface GitInfo {
@@ -20,28 +24,27 @@ export interface GitInfo {
 	isWorktree: boolean;
 }
 
-/** Cache file written by refresh-cache, read by render-row1. */
-export interface CacheFile {
-	ts: number;
+export interface SessionEntry {
 	model: string | null;
-	kimi: QuotaData | null;
-	minimax: QuotaData | null;
-	git: GitInfo | null;
+	provider: string | null;
+	updatedAt: number;
 }
 
-/**
- * Quota cache (one file, written by hooks/refresh-cache.ts, read by
- * bin/render-row1.ts). The only disk cache the plugin uses since v1.3.1;
- * git data is read live from `git status` on every render.
- */
 export interface QuotaCache {
 	ts: number;
 	model: string | null;
 	kimi: QuotaData | null;
 	minimax: QuotaData | null;
+	openrouter?: RequestQuotaData | null;
+	openrouter2?: RequestQuotaData | null;
+	opencodeGo?: QuotaData | null;
+	cline?: QuotaData | null;
+	zai?: QuotaData | null;
+	sessions?: Record<string, SessionEntry>;
+	keyStatus?: Record<string, "ok" | "key" | "api">;
+	modelIndex?: Record<string, string>;
 }
 
-/** Payload kimi-code passes to the status_line.command via stdin. */
 export interface StatusLinePayload {
 	model: string;
 	cwd: string;
@@ -54,10 +57,3 @@ export interface StatusLinePayload {
 	sessionId: string;
 	version: string;
 }
-
-/**
- * Bar glyphs used by helpers.ts to render quota bars.
- * Provider-neutral; live in types.ts so they are not tied to a specific fetcher.
- */
-export const FILLED = "▮";
-export const EMPTY = "▯";

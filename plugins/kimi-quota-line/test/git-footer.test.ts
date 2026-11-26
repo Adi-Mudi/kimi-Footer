@@ -1,9 +1,3 @@
-/**
- * Tests for src/git-footer.ts.
- *
- * Uses a temp directory to isolate from the real cwd (where this test file lives).
- */
-
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,19 +20,19 @@ describe("getCurrentBranch", () => {
 
 	it("returns null when not in a git repo", async () => {
 		process.chdir(tmpDir);
-		// Need to import fresh after chdir so the module captures the new cwd
-		// (git calls go through execSync which uses process.cwd() at call time).
+		
+		
 		const { getCurrentBranch } = await import("../src/git-footer.js");
 		expect(getCurrentBranch()).toBeNull();
 	});
 
 	it("returns the branch name when inside a git repo", async () => {
-		// Init a repo with a known branch.
+		
 		spawnSync("git", ["init", "-b", "test-branch", tmpDir], { stdio: "ignore" });
-		// Configure git user so commits work if any test wants them later.
+		
 		spawnSync("git", ["-C", tmpDir, "config", "user.email", "test@test.local"], { stdio: "ignore" });
 		spawnSync("git", ["-C", tmpDir, "config", "user.name", "Test"], { stdio: "ignore" });
-		// Create a commit so HEAD is valid.
+		
 		writeFileSync(join(tmpDir, "README.md"), "test");
 		spawnSync("git", ["-C", tmpDir, "add", "."]);
 		spawnSync("git", ["-C", tmpDir, "commit", "-m", "init"], { stdio: "ignore" });
@@ -70,10 +64,6 @@ describe("isInWorktree", () => {
 	});
 });
 
-/**
- * Helper: create a fresh git repo with one commit and chdir into it.
- * Returns the temp dir path. Caller must restore cwd.
- */
 function makeRepoWithCommit(branch = "main"): { tmpDir: string; originalCwd: string } {
 	const originalCwd = process.cwd();
 	const tmpDir = mkdtempSync(join(tmpdir(), "kql-live-"));
@@ -93,7 +83,7 @@ describe("getGitDetails (live mode, maxAge=0) — the v1.3.1 fix, configurable",
 
 	beforeEach(() => {
 		({ tmpDir, originalCwd } = makeRepoWithCommit());
-		// maxAge 0 = always live. These tests pin the LIVE behavior.
+		
 		process.env.KIMI_GIT_MAX_AGE_MS = "0";
 	});
 
@@ -105,11 +95,11 @@ describe("getGitDetails (live mode, maxAge=0) — the v1.3.1 fix, configurable",
 
 	it("returns count=1 after a file is modified (live data on first call)", async () => {
 		const { getGitDetails } = await import("../src/git-footer.js");
-		// Just-committed repo: no uncommitted changes.
+		
 		expect(getGitDetails()?.count).toBe(0);
-		// Modify a file in-place.
+		
 		writeFileSync(join(tmpDir, "README.md"), "modified");
-		// Next call sees the change immediately — no cache to flush.
+		
 		expect(getGitDetails()?.count).toBe(1);
 	});
 
@@ -123,14 +113,14 @@ describe("getGitDetails (live mode, maxAge=0) — the v1.3.1 fix, configurable",
 	});
 
 	it("regression: with maxAge=0 every call is live (no TTL may hide changes)", async () => {
-		// This test fails if a time-based TTL is re-introduced. maxAge=0 is
-		// the documented always-live mode; these changes are unstaged
-		// edits that .git/index mtime cannot see, so only live mode
-		// catches them immediately.
+		
+		
+		
+		
 		const { getGitDetails } = await import("../src/git-footer.js");
 		writeFileSync(join(tmpDir, "a.txt"), "x");
 		expect(getGitDetails()?.count).toBe(1);
-		// Two more changes, no delay, no manual /refresh.
+		
 		writeFileSync(join(tmpDir, "a.txt"), "y");
 		writeFileSync(join(tmpDir, "b.txt"), "z");
 		expect(getGitDetails()?.count).toBe(2);
@@ -146,7 +136,7 @@ describe("getGitDetails (live mode, maxAge=0) — the v1.3.1 fix, configurable",
 	});
 
 	it("stale git-cache with wrong mtimes is IGNORED (mtime is the guard)", async () => {
-		// Pre-write a git-cache entry with deliberately wrong mtimes + data.
+		
 		const cacheDir = process.env.XDG_RUNTIME_DIR || "/tmp";
 		const cachePath = join(cacheDir, "kimi-quota-line-git-cache.json");
 		writeFileSync(
@@ -162,15 +152,15 @@ describe("getGitDetails (live mode, maxAge=0) — the v1.3.1 fix, configurable",
 			}),
 		);
 		try {
-			// Modify the real repo.
+			
 			writeFileSync(join(tmpDir, "a.txt"), "x");
 			const { getGitDetails } = await import("../src/git-footer.js");
 			const r = getGitDetails();
-			// mtime mismatch → cache invalid → live git.
+			
 			expect(r?.count).toBe(1);
 			expect(r?.branch).not.toBe("fake-branch");
 		} finally {
-			// Clean up so other tests are not affected.
+			
 			rmSync(cachePath, { force: true });
 		}
 	});
@@ -181,7 +171,7 @@ describe("getGitDetails (default maxAge — mtime invalidation)", () => {
 	let originalCwd: string;
 
 	beforeEach(() => {
-		delete process.env.KIMI_GIT_MAX_AGE_MS; // default 2000 ms
+		delete process.env.KIMI_GIT_MAX_AGE_MS; 
 		({ tmpDir, originalCwd } = makeRepoWithCommit());
 	});
 
@@ -193,30 +183,30 @@ describe("getGitDetails (default maxAge — mtime invalidation)", () => {
 
 	it("staged change invalidates instantly via index mtime", async () => {
 		const { getGitDetails } = await import("../src/git-footer.js");
-		expect(getGitDetails()?.count).toBe(0); // miss → live → cache written
+		expect(getGitDetails()?.count).toBe(0); 
 		writeFileSync(join(tmpDir, "new.txt"), "new");
-		spawnSync("git", ["-C", tmpDir, "add", "new.txt"]); // touches .git/index
-		expect(getGitDetails()?.count).toBe(1); // mtime mismatch → live
+		spawnSync("git", ["-C", tmpDir, "add", "new.txt"]); 
+		expect(getGitDetails()?.count).toBe(1); 
 	});
 
 	it("commit invalidates instantly via HEAD + index mtime", async () => {
 		const { getGitDetails } = await import("../src/git-footer.js");
 		writeFileSync(join(tmpDir, "a.txt"), "x");
-		expect(getGitDetails()?.count).toBe(1); // cache written (count 1)
+		expect(getGitDetails()?.count).toBe(1); 
 		spawnSync("git", ["-C", tmpDir, "add", "."]);
 		spawnSync("git", ["-C", tmpDir, "commit", "-m", "w"], { stdio: "ignore" });
-		expect(getGitDetails()?.count).toBe(0); // HEAD+index changed → live
+		expect(getGitDetails()?.count).toBe(0); 
 	});
 
 	it("unstaged edit within maxAge serves the cached count (documented blind spot)", async () => {
-		process.env.KIMI_GIT_MAX_AGE_MS = "60000"; // deterministic window
+		process.env.KIMI_GIT_MAX_AGE_MS = "60000"; 
 		const { getGitDetails } = await import("../src/git-footer.js");
-		expect(getGitDetails()?.count).toBe(0); // miss → live → cache written
-		// Plain file edits do NOT touch .git/index mtime, so within the
-		// maxAge window the cached count is served. This is the documented
-		// ≤maxAge staleness trade-off (ccstatusline ships the same).
+		expect(getGitDetails()?.count).toBe(0); 
+		
+		
+		
 		writeFileSync(join(tmpDir, "a.txt"), "x");
-		expect(getGitDetails()?.count).toBe(0); // cached, no subprocess
+		expect(getGitDetails()?.count).toBe(0); 
 	});
 
 	it("same edit is fresh once maxAge is set to 0 (always-live mode)", async () => {
@@ -224,9 +214,9 @@ describe("getGitDetails (default maxAge — mtime invalidation)", () => {
 		const { getGitDetails } = await import("../src/git-footer.js");
 		expect(getGitDetails()?.count).toBe(0);
 		writeFileSync(join(tmpDir, "a.txt"), "x");
-		expect(getGitDetails()?.count).toBe(0); // cached within window
-		process.env.KIMI_GIT_MAX_AGE_MS = "0"; // always live
-		expect(getGitDetails()?.count).toBe(1); // fresh
+		expect(getGitDetails()?.count).toBe(0); 
+		process.env.KIMI_GIT_MAX_AGE_MS = "0"; 
+		expect(getGitDetails()?.count).toBe(1); 
 	});
 });
 
@@ -264,12 +254,12 @@ describe("getGitDetails status breakdown", () => {
 
 	it("counts a mix: modified + staged + untracked", async () => {
 		const { getGitDetails } = await import("../src/git-footer.js");
-		// (1) modify tracked README.md
+		
 		writeFileSync(join(tmpDir, "README.md"), "edited");
-		// (2) stage a new file
+		
 		writeFileSync(join(tmpDir, "staged.txt"), "staged");
 		spawnSync("git", ["-C", tmpDir, "add", "staged.txt"]);
-		// (3) untracked file
+		
 		writeFileSync(join(tmpDir, "loose.txt"), "loose");
 		expect(getGitDetails()?.count).toBe(3);
 	});
@@ -341,12 +331,12 @@ describe("getGitDetails branch + edge", () => {
 	});
 
 	it("detects worktree from a subdirectory of the worktree (v1.3.3.1 regression)", async () => {
-		// v1.3.3 used fs.statSync(".git") for worktree detection. That worked
-		// from the worktree root (covered by the test above) but returned
-		// false from any subdirectory of the worktree, because `.git` is
-		// only at the worktree root. v1.3.3.1 reverted to
-		// `git rev-parse --git-dir | grep worktrees`, which walks up to
-		// find the worktree root and works from any cwd.
+		
+		
+		
+		
+		
+		
 		({ tmpDir, originalCwd } = makeRepoWithCommit("main"));
 		const wtDir = mkdtempSync(join(tmpdir(), "kql-wt-subdir-"));
 		spawnSync("git", ["-C", tmpDir, "worktree", "add", "-b", "wt-sub", wtDir], { stdio: "ignore" });
@@ -367,7 +357,7 @@ describe("getGitDetails branch + edge", () => {
 
 	it("returns 'no git' when git binary is missing (PATH bypass)", async () => {
 		({ tmpDir, originalCwd } = makeRepoWithCommit("main"));
-		// Force every git subprocess to fail by emptying PATH.
+		
 		const originalPath = process.env.PATH;
 		process.env.PATH = "";
 		try {

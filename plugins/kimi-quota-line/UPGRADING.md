@@ -17,6 +17,15 @@ A future kimi-code release can break this plugin if any of these change. Check t
 5. **`KIMI_PLUGIN_ROOT` env var** — passed to hook processes per the [Plugins doc](https://www.kimi.com/code/docs/en/kimi-code-cli/customization/plugins.html). We use it in `commands/refresh.md`.
 6. **Auth path `$KIMI_CODE_HOME/auth.json`** — both fetchers read this file. If Kimi moves to a different auth location, our quota fetches silently fail and the bar hides.
 
+## Upstream requests (would simplify this plugin)
+
+Two payload gaps force workarounds in the v2 provider matching:
+
+1. **No `provider` in the status-line payload** — `statusLinePayload()` sends only the model display name, so the render path cannot see which auth provider serves the model. Provider matching therefore rides on the SessionStart hook's model OBJECT (`{provider, model}`) preserved in the cache. A `provider` (or provider-prefixed alias) field in the payload would let the render resolve the provider per render with zero staleness.
+2. **No `model` in the SessionHeartbeat hook payload** — only SessionStart carries a model (the default-model OBJECT). The heartbeat preserves the SessionStart alias; a per-heartbeat model field would remove the mid-session `/model` switch lag.
+
+Both are feature requests to the kimi-code CLI, not breaks — re-check them when bumping CLI versions.
+
 ## Manual smoke checklist
 
 Run this end-to-end after any kimi-code version bump. It catches the 6 contract surfaces above in one pass.

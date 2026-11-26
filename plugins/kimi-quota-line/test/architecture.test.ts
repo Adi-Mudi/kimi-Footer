@@ -1,17 +1,3 @@
-/**
- * Layer guard test — enforces the layer rules from AGENTS.md.
- *
- * Reads each source file as text and asserts forbidden imports / symbols.
- * This is the only architecture-level enforcement we have. If a future
- * contributor adds e.g. a `fetch` call to `bin/render-row1.ts`, this test
- * fails in CI before the change can land.
- *
- * Not exhaustive — it cannot catch every possible violation. But it catches
- * the most common drift: someone adding I/O to the render path, coupling
- * the cache module to a fetcher, or reintroducing the git disk cache that
- * was the source of the v1.3.0 staleness bug.
- */
-
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,16 +20,16 @@ describe("architecture layer rules", () => {
 		const src = readBin("render-row1.ts");
 
 		it("does not import the API-calling fetch functions", () => {
-			// isKimiModel / isMinimaxModel are pure name detectors and may be
-			// imported (they do not hit the network). We forbid the actual
-			// fetch functions instead.
+			
+			
+			
 			expect(src).not.toMatch(/\bfetchKimiUsage\b/);
 			expect(src).not.toMatch(/\bfetchMinimaxUsage\b/);
 		});
 
 		it("does not call fetch", () => {
-			// Disallow `fetch(` and `globalThis.fetch` and bare `fetch(`. We
-			// accept `fetch(` only in comments. Strip line comments first.
+			
+			
 			const stripped = src.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
 			expect(stripped).not.toMatch(/\bfetch\s*\(/);
 		});
@@ -56,19 +42,19 @@ describe("architecture layer rules", () => {
 		});
 
 		it("does not import child_process", () => {
-			// v1.3.1: render-row1 does not call git directly. git-footer.ts
-			// does. The render path must not spawn subprocesses.
+			
+			
 			expect(src).not.toMatch(/from\s+["']node:child_process/);
 			expect(src).not.toMatch(/from\s+["']child_process/);
 		});
 
 		it("does not import the fetcher modules at all", () => {
-			// The fetcher modules read auth.json at module init (getKimiToken()
-			// / getMinimaxToken()). Even importing a "pure" function from them
-			// pulls the credential read into the render process. Model-name
-			// detection comes from the pure model-detect.ts module instead.
 			expect(src).not.toMatch(/kimi-fetcher/);
 			expect(src).not.toMatch(/minimax-fetcher/);
+			expect(src).not.toMatch(/openrouter-fetcher/);
+			expect(src).not.toMatch(/opencode-go-fetcher/);
+			expect(src).not.toMatch(/cline-fetcher/);
+			expect(src).not.toMatch(/from\s+["']\.\.\/src\/providers/);
 		});
 	});
 
@@ -99,14 +85,10 @@ describe("architecture layer rules", () => {
 		});
 
 		it("passes --no-optional-locks so status checks never fight index.lock", () => {
-			// ccstatusline's fix: background status checks must never race
-			// the user's own git commands for .git/index.lock.
 			expect(src).toContain("--no-optional-locks");
 		});
 
 		it("no longer spawns git rev-parse (worktree detection reads .git directly)", () => {
-			// Strip comments first — the header documents the design and may
-			// mention the old command; only CODE may not contain it.
 			const stripped = src.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
 			expect(stripped).not.toContain("rev-parse");
 		});
@@ -120,9 +102,6 @@ describe("architecture layer rules", () => {
 
 	describe("src/git-cache.ts (mtime-keyed — the v1.3.1 TTL bug must never return)", () => {
 		it("exists and is keyed on git internals' mtimes", () => {
-			// Re-introduced by the community-architecture change: git data is
-			// cached, but ONLY with mtime keys + read-time age checks. A
-			// TTL-only cache (write-time freshness) is the v1.3.1 bug.
 			const src = readSrc("git-cache.ts");
 			expect(src).toContain("headMtimeMs");
 			expect(src).toContain("indexMtimeMs");

@@ -6,6 +6,74 @@ per release.
 
 ---
 
+## v1.3.5-clinepass — 2026-11-27 — CL-P quota, /model switch & ZAI
+
+**Tag**: `v1.3.5-clinepass` · **Branch**: `dev` · **PRs**: #4, #5, #6, #7
+
+### Highlights
+
+- **PR #4 (`feat/cline-pass-quota`) — CL-P usage-limits metrics (`M:%` → `W:%` → `5H:%`):**
+  - `src/cline-fetcher.ts` fetches `https://api.cline.bot/api/v1/users/me/plan/usage-limits` (4 s timeout, 60 s cooldown on 401/403/404/429/bad JSON, `percentUsed` clamped 0–100, missing windows omitted).
+  - `src/helpers.ts` parses date-only `YYYY-MM-DD`, ISO datetime, and epoch seconds/ms in `hoursUntilReset`, enforces `"error"` first at `>= 100%`, and clamps elapsed hours into `[0, windowHours]`.
+  - `bin/render-row1.ts` renders `CL-P` metrics (`M:%` → `W:%` → `5H:%`) gated by `limit > 0` and caps `< 100%` rounding at `99%`.
+- **PR #5 (`fix/model-switch-stale-provider`) — Dynamic `/model` switch resolution:**
+  - `resolveForSession` ignores stale `sessions[sid]` when `payload.model` bare/tail name differs and never falls back to stale `cache.model` on `modelIndex` miss; case-insensitive `modelIndex` lookup.
+  - `buildModelIndex` strips `^managed:` and indexes section key, `display_name`, and `model` ID; `refresh-cache` updates `sessions[sid]` on any hook carrying `session_id` + `model`.
+- **PR #6 (`fix/unknown-provider-label`) — Unknown-prefix guard + `ZAI` + matrix/contract tests:**
+  - Rejects unknown provider prefixes (`zai/`, `zaa/`, `zhipu/`, `kilo/`) before `modelIndex` lookup so colliding `display_name`s never hijack `OR` `Req:`, while preserving exact `vendor/model` ID hits.
+  - Registers `zai-coding-plan` → `ZAI` in `KNOWN_PROVIDER_PREFIXES`, `SHORT_LABELS`, and `PROVIDERS`.
+  - Adds sanitized 5-provider `test/fixtures/config.sample.toml` and `test/provider-contract.test.ts` (golden matrix, `[providers.*]`/`[models.*]` contract, subprocess E2E).
+- **PR #7 (`fix/theme-success-color`) — Dim theme `#6e7681` success color:**
+  - `statusFg("success")` emits dim theme `#6e7681` (`\x1b[38;2;110;118;129m`), keeping amber warning and red error.
+
+### Verification
+
+- typecheck PASS · build PASS · unit 243/243 (15/15 files; `git-footer.test.ts` excluded for global `core.hooksPath`) · stress 5/5
+
+---
+
+## v1.3.4-monthly — 2026-11-26 — Monthly quota (M:)
+
+**Tag**: `v1.3.4-monthly` · **Branch**: `dev` · **PR**: #3
+
+### Highlights
+
+- Optional monthly metric `M:%` when the provider reports it.
+- Order when present: `M:%` → `W:%` → `5H:%`. Hidden when absent.
+- Kimi: parses `usages.limit_month_total` / `limit_month_code`.
+- OpenCode Go: keeps `usage.monthly` (was discarded).
+- `monthlyPaceColor` — 720 h window, 24 h grace.
+- OpenRouter / MiniMax / CL-P unchanged.
+- Live verify: `OPC-G  mimo-v2.6-flash  M:38%  W:29%  5H:1%`.
+
+### Verification
+
+- typecheck PASS · unit 198/198 (git-footer env-excluded) · stress 5/5 · build PASS
+- Plugin AGENTS.md / README / CHANGELOG updated
+
+---
+
+## v1.3.3-multisession — 2026-11-24 — Multi-session provider + labels
+
+**Tag**: `v1.3.3-multisession` · **Branch**: `main`
+
+### Highlights
+
+- Each kimi CLI session shows its **own** active model/provider (no more shared OPC-G).
+- `modelIndex` from `config.toml` (`display_name` / model id → provider).
+- Session-scoped cache: `sessions[sessionId]` + `resolveForSession`.
+- Status payload accepts `session_id` or `sessionId`.
+- Short labels: `OPC-G` (was OCG), `CL-P` (was CP).
+- Key badges: `Err:key` (red), `Err:api` (amber).
+- Live Herdr verify: `OR  Nemotron 3 Ultra (free)  Req: 217/1000`.
+
+### Verification
+
+- Tests 217/217 · stress 5/5 · typecheck/build green
+- Issue #2 closed · Discussion #1 updated
+
+---
+
 ## v1.3.2-gitlive — 2026-09-05 — Install UX
 
 **Tag**: `v1.3.2-gitlive` · **Commit**: `89087cb` (merge) · **Branch**: `main`

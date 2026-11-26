@@ -1,0 +1,337 @@
+{
+  "id": "right-zone-redesign_psrs_20261123",
+  "kind": "psrs",
+  "title": "right-zone-redesign baseline spec",
+  "version": "v1.0",
+  "status": "draft",
+  "initiative": "right-zone-redesign",
+  "date": "2026-11-23",
+  "prd_items": [
+    {
+      "id": "PRD-1",
+      "title": "Right zone layout",
+      "statement": "Status line row 1 right zone shows short provider label, full model name, and provider-specific metrics with two-space field gaps."
+    },
+    {
+      "id": "PRD-2",
+      "title": "Provider metrics matrix",
+      "statement": "Kimi/MM/OCG show W% and 5H%. OR/OR2 show Req: used/limit. CP shows identity only."
+    },
+    {
+      "id": "PRD-3",
+      "title": "Model visibility",
+      "statement": "Model name is never truncated. Narrow terminals drop metrics first, then folder, never model/short."
+    },
+    {
+      "id": "PRD-4",
+      "title": "Wrong-subscription guard",
+      "statement": "Gateway sessions must not display another provider's quota metrics from bare model-name detection."
+    }
+  ],
+  "requirements": [
+    {
+      "id": "REQ-RZR-1",
+      "statement": "Right zone SHALL render the locked mockup strings for Kimi, MM, OCG, OR, OR2, and CP.",
+      "category": "functional"
+    },
+    {
+      "id": "REQ-RZR-2",
+      "statement": "Right zone SHALL display the full model name with no ellipsis truncation.",
+      "category": "functional"
+    },
+    {
+      "id": "REQ-RZR-3",
+      "statement": "Metrics labels SHALL use 5H and MUST NOT use 5R.",
+      "category": "functional"
+    },
+    {
+      "id": "REQ-RZR-4",
+      "statement": "Narrow-terminal layout SHALL drop metrics first, then folder, and SHALL NOT drop short label or model name.",
+      "category": "functional"
+    },
+    {
+      "id": "REQ-RZR-5",
+      "statement": "Gateway provider sessions SHALL NOT show direct-provider quota metrics from bare-name detection.",
+      "category": "functional"
+    },
+    {
+      "id": "REQ-RZR-6",
+      "statement": "bin/render-row1.ts SHALL NOT import fetchers, providers registry, or call fetch().",
+      "category": "constraint"
+    },
+    {
+      "id": "REQ-RZR-7",
+      "statement": "PROVIDERS aliasPrefixes SHALL stay in lockstep with KNOWN_PROVIDER_PREFIXES and SHORT_LABELS.",
+      "category": "constraint"
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-RZR-1-1",
+      "requirement_id": "REQ-RZR-1",
+      "given": "cache with kimi data and model kimi-k3.1-pro",
+      "when": "buildRightZone is called",
+      "then": "visible string matches /^Kimi {2}kimi-k3\\.1-pro {2}W:\\d+% {2}5H:\\d+%$/"
+    },
+    {
+      "id": "AC-RZR-1-2",
+      "requirement_id": "REQ-RZR-1",
+      "given": "cache with minimax data and model minimax/minimax-m3",
+      "when": "buildRightZone is called",
+      "then": "visible string matches /^MM {4}minimax-m3 {2}W:\\d+% {2}5H:\\d+%$/"
+    },
+    {
+      "id": "AC-RZR-1-3",
+      "requirement_id": "REQ-RZR-1",
+      "given": "cache with opencodeGo percent data and model opencode-go/mimo-v2.6-flash",
+      "when": "buildRightZone is called",
+      "then": "visible string matches /^OCG {3}mimo-v2\\.6-flash {2}W:7% {2}5H:3%$/"
+    },
+    {
+      "id": "AC-RZR-1-4",
+      "requirement_id": "REQ-RZR-1",
+      "given": "cache openrouter used=42 limit=1000 and model openrouter/anthropic/claude-opus-4.8",
+      "when": "buildRightZone is called",
+      "then": "visible string matches /^OR {4}anthropic\\/claude-opus-4\\.8 {2}Req: 42\\/1000$/"
+    },
+    {
+      "id": "AC-RZR-1-5",
+      "requirement_id": "REQ-RZR-1",
+      "given": "cache openrouter2 used=254 limit=1000 and model openrouter-2/openai/gpt-6-sol",
+      "when": "buildRightZone is called",
+      "then": "visible string matches /^OR2 {3}openai\\/gpt-6-sol {2}Req: 254\\/1000$/"
+    },
+    {
+      "id": "AC-RZR-1-6",
+      "requirement_id": "REQ-RZR-1",
+      "given": "model cline-pass/cline-pass/muse-spark-1.3 with no metrics",
+      "when": "buildRightZone is called",
+      "then": "visible string matches /^CP {4}cline-pass\\/muse-spark-1\\.3$/ and has no W: 5H: or Req:"
+    },
+    {
+      "id": "AC-RZR-2-1",
+      "requirement_id": "REQ-RZR-2",
+      "given": "a 40-character model name",
+      "when": "buildRightZone is called",
+      "then": "the full name appears with no ellipsis"
+    },
+    {
+      "id": "AC-RZR-2-2",
+      "requirement_id": "REQ-RZR-2",
+      "given": "payload openrouter/anthropic/claude-opus-4.8",
+      "when": "fullModelName is called",
+      "then": "result is anthropic/claude-opus-4.8"
+    },
+    {
+      "id": "AC-RZR-3-1",
+      "requirement_id": "REQ-RZR-3",
+      "given": "any provider with W and 5H metrics",
+      "when": "buildRightZone is called",
+      "then": "output contains 5H: and does not contain 5R"
+    },
+    {
+      "id": "AC-RZR-4-1",
+      "requirement_id": "REQ-RZR-4",
+      "given": "width too small for metrics",
+      "when": "buildRow1 is called",
+      "then": "short and full model remain"
+    },
+    {
+      "id": "AC-RZR-4-2",
+      "requirement_id": "REQ-RZR-4",
+      "given": "very narrow width",
+      "when": "buildRow1 is called",
+      "then": "full model name still present"
+    },
+    {
+      "id": "AC-RZR-5-1",
+      "requirement_id": "REQ-RZR-5",
+      "given": "payload cline-pass/kimi-k2 with kimi data in cache",
+      "when": "buildRightZone is called",
+      "then": "output shows CP and kimi-k2 and no W: metrics"
+    },
+    {
+      "id": "AC-RZR-5-2",
+      "requirement_id": "REQ-RZR-5",
+      "given": "payload kimi-k2 and cache model cline-pass/kimi-k2",
+      "when": "resolveActiveProviderId is called",
+      "then": "result is cline-pass"
+    },
+    {
+      "id": "AC-RZR-5-3",
+      "requirement_id": "REQ-RZR-5",
+      "given": "payload MiniMax-M3 and cache kimi-code session",
+      "when": "resolveActiveProviderId is called",
+      "then": "result is minimax"
+    },
+    {
+      "id": "AC-RZR-6-1",
+      "requirement_id": "REQ-RZR-6",
+      "given": "bin/render-row1.ts source",
+      "when": "architecture test runs",
+      "then": "no fetcher imports and no fetch() call"
+    },
+    {
+      "id": "AC-RZR-7-1",
+      "requirement_id": "REQ-RZR-7",
+      "given": "PROVIDERS and KNOWN_PROVIDER_PREFIXES",
+      "when": "provider-alias sync test runs",
+      "then": "prefix lists match and short labels match SHORT_LABELS"
+    },
+    {
+      "id": "AC-PRD-1-1",
+      "requirement_id": "PRD-1",
+      "given": "status line row 1",
+      "when": "right zone renders",
+      "then": "short provider, full model, and metrics appear with two-space gaps"
+    },
+    {
+      "id": "AC-PRD-2-1",
+      "requirement_id": "PRD-2",
+      "given": "each of the six providers",
+      "when": "metrics are built",
+      "then": "provider-specific metric shape matches D4 matrix"
+    },
+    {
+      "id": "AC-PRD-3-1",
+      "requirement_id": "PRD-3",
+      "given": "long model name and narrow width",
+      "when": "buildRow1 runs",
+      "then": "model remains visible without ellipsis"
+    },
+    {
+      "id": "AC-PRD-4-1",
+      "requirement_id": "PRD-4",
+      "given": "gateway session with direct-provider-looking bare model",
+      "when": "metrics are chosen",
+      "then": "gateway metrics only; no foreign quota bars"
+    }
+  ],
+  "test_cases": [
+    {
+      "id": "TC-RZR-01",
+      "title": "locked mockup strings",
+      "level": "LOCAL",
+      "type": "unit",
+      "status": "planned"
+    },
+    {
+      "id": "TC-RZR-02",
+      "title": "full model no truncation",
+      "level": "LOCAL",
+      "type": "unit",
+      "status": "planned"
+    },
+    {
+      "id": "TC-RZR-03",
+      "title": "5H label not 5R",
+      "level": "LOCAL",
+      "type": "unit",
+      "status": "planned"
+    },
+    {
+      "id": "TC-RZR-04",
+      "title": "narrow drop order keeps model",
+      "level": "LOCAL",
+      "type": "unit",
+      "status": "planned"
+    },
+    {
+      "id": "TC-RZR-05",
+      "title": "gateway wrong-subscription guard",
+      "level": "LOCAL",
+      "type": "unit",
+      "status": "planned"
+    },
+    {
+      "id": "TC-RZR-06",
+      "title": "architecture credential-free bin",
+      "level": "LOCAL",
+      "type": "unit",
+      "status": "planned"
+    },
+    {
+      "id": "TC-RZR-07",
+      "title": "registry prefix sync",
+      "level": "LOCAL",
+      "type": "unit",
+      "status": "planned"
+    },
+    {
+      "id": "TC-RZR-08",
+      "title": "subprocess cache roundtrip render",
+      "level": "LOCAL",
+      "type": "integration",
+      "status": "planned"
+    },
+    {
+      "id": "TC-RZR-09",
+      "title": "width detection e2e",
+      "level": "LOCAL",
+      "type": "e2e",
+      "status": "planned"
+    }
+  ],
+  "test_bindings": [
+    {
+      "requirement_id": "REQ-RZR-1",
+      "test_case_id": "TC-RZR-01"
+    },
+    {
+      "requirement_id": "REQ-RZR-2",
+      "test_case_id": "TC-RZR-02"
+    },
+    {
+      "requirement_id": "REQ-RZR-3",
+      "test_case_id": "TC-RZR-03"
+    },
+    {
+      "requirement_id": "REQ-RZR-4",
+      "test_case_id": "TC-RZR-04"
+    },
+    {
+      "requirement_id": "REQ-RZR-5",
+      "test_case_id": "TC-RZR-05"
+    },
+    {
+      "requirement_id": "REQ-RZR-6",
+      "test_case_id": "TC-RZR-06"
+    },
+    {
+      "requirement_id": "REQ-RZR-7",
+      "test_case_id": "TC-RZR-07"
+    },
+    {
+      "requirement_id": "REQ-RZR-1",
+      "test_case_id": "TC-RZR-08"
+    },
+    {
+      "requirement_id": "REQ-RZR-4",
+      "test_case_id": "TC-RZR-09"
+    },
+    {
+      "requirement_id": "PRD-1",
+      "test_case_id": "TC-RZR-01"
+    },
+    {
+      "requirement_id": "PRD-1",
+      "test_case_id": "TC-RZR-08"
+    },
+    {
+      "requirement_id": "PRD-2",
+      "test_case_id": "TC-RZR-01"
+    },
+    {
+      "requirement_id": "PRD-3",
+      "test_case_id": "TC-RZR-02"
+    },
+    {
+      "requirement_id": "PRD-3",
+      "test_case_id": "TC-RZR-04"
+    },
+    {
+      "requirement_id": "PRD-4",
+      "test_case_id": "TC-RZR-05"
+    }
+  ]
+}
