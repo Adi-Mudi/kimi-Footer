@@ -42,24 +42,31 @@ function usedPct(d: QuotaData, which: "m" | "w" | "h"): number {
 	const used = which === "m" ? (d.mUsed ?? 0) : which === "w" ? d.wUsed : d.hUsed;
 	const limit = which === "m" ? (d.mLimit ?? 0) : which === "w" ? d.wLimit : d.hLimit;
 	if (limit <= 0) return 0;
-	return Math.round((used / limit) * 100);
+	const raw = (used / limit) * 100;
+	if (raw >= 100) return 100;
+	const rounded = Math.round(raw);
+	return rounded >= 100 ? 99 : rounded;
 }
 
 function hasMonthly(d: QuotaData): boolean {
 	return typeof d.mUsed === "number" && typeof d.mLimit === "number" && d.mLimit > 0;
 }
 
-function windowMetrics(d: QuotaData): string {
+function windowMetrics(d: QuotaData): string | undefined {
 	const parts: string[] = [];
 	if (hasMonthly(d)) {
 		const mColor = monthlyPaceColor(d.mUsed ?? 0, d.mLimit ?? 0, d.mResetAt);
 		parts.push(statusFg(mColor, `M:${usedPct(d, "m")}%`));
 	}
-	const wColor = weeklyPaceColor(d.wUsed, d.wLimit, d.wResetAt);
-	const hColor = sessionPaceColor(d.hUsed, d.hLimit, d.hResetAt);
-	parts.push(statusFg(wColor, `W:${usedPct(d, "w")}%`));
-	parts.push(statusFg(hColor, `5H:${usedPct(d, "h")}%`));
-	return parts.join("  ");
+	if (d.wLimit > 0) {
+		const wColor = weeklyPaceColor(d.wUsed, d.wLimit, d.wResetAt);
+		parts.push(statusFg(wColor, `W:${usedPct(d, "w")}%`));
+	}
+	if (d.hLimit > 0) {
+		const hColor = sessionPaceColor(d.hUsed, d.hLimit, d.hResetAt);
+		parts.push(statusFg(hColor, `5H:${usedPct(d, "h")}%`));
+	}
+	return parts.length > 0 ? parts.join("  ") : undefined;
 }
 
 function reqColor(r: RequestQuotaData): "success" | "warning" | "error" {
@@ -84,6 +91,9 @@ function metricsFor(
 	}
 	if (providerId === "opencode-go" && cache.opencodeGo) {
 		return windowMetrics(cache.opencodeGo);
+	}
+	if (providerId === "cline-pass" && cache.cline) {
+		return windowMetrics(cache.cline);
 	}
 	if (providerId === "openrouter" && cache.openrouter) {
 		const r = cache.openrouter;
