@@ -57,18 +57,21 @@ describe("parseModelAlias", () => {
 });
 
 describe("resolveProviderId + short labels", () => {
-	it("resolves all 6 known prefixes", () => {
+	it("resolves all 7 known prefixes", () => {
 		expect(resolveProviderId("kimi-code")).toBe("kimi-code");
 		expect(resolveProviderId("minimax")).toBe("minimax");
 		expect(resolveProviderId("openrouter")).toBe("openrouter");
 		expect(resolveProviderId("openrouter-2")).toBe("openrouter-2");
 		expect(resolveProviderId("opencode-go")).toBe("opencode-go");
 		expect(resolveProviderId("cline-pass")).toBe("cline-pass");
+		expect(resolveProviderId("zai-coding-plan")).toBe("zai-coding-plan");
 	});
 
 	it("returns null for unknown prefixes", () => {
 		expect(resolveProviderId("kilo")).toBeNull();
 		expect(resolveProviderId("cline")).toBeNull();
+		expect(resolveProviderId("zai")).toBeNull();
+		expect(resolveProviderId("zhipu")).toBeNull();
 	});
 
 	it("maps short labels for locked design", () => {
@@ -78,6 +81,7 @@ describe("resolveProviderId + short labels", () => {
 		expect(shortLabelFor("openrouter")).toBe("OR");
 		expect(shortLabelFor("openrouter-2")).toBe("OR2");
 		expect(shortLabelFor("cline-pass")).toBe("CL-P");
+		expect(shortLabelFor("zai-coding-plan")).toBe("ZAI");
 		expect(shortLabelFor(null)).toBeNull();
 	});
 

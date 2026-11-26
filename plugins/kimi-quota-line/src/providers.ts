@@ -8,6 +8,7 @@ import {
 } from "./openrouter-fetcher.js";
 import { fetchOpenCodeGoUsage, getOpenCodeGoData, isOpenCodeGoModel } from "./opencode-go-fetcher.js";
 import { fetchClineUsage, getClineData, isClineModel } from "./cline-fetcher.js";
+import { isZaiModel } from "./model-detect.js";
 import type { QuotaCache, QuotaData, RequestQuotaData } from "./types.js";
 
 export interface QuotaProvider {
@@ -18,6 +19,7 @@ export interface QuotaProvider {
 	readonly getData: () => QuotaData | RequestQuotaData | null;
 	readonly aliasPrefixes: readonly string[];
 	readonly shortLabel: string;
+	readonly hasUsageApi?: boolean;
 }
 
 export const kimiProvider: QuotaProvider = {
@@ -80,6 +82,17 @@ export const clineProvider: QuotaProvider = {
 	shortLabel: "CL-P",
 };
 
+export const zaiProvider: QuotaProvider = {
+	id: "zai-coding-plan",
+	cacheKey: "zai",
+	matches: isZaiModel,
+	fetch: async () => {},
+	getData: () => null,
+	aliasPrefixes: ["zai-coding-plan"],
+	shortLabel: "ZAI",
+	hasUsageApi: false,
+};
+
 export const PROVIDERS: readonly QuotaProvider[] = [
 	kimiProvider,
 	minimaxProvider,
@@ -87,6 +100,7 @@ export const PROVIDERS: readonly QuotaProvider[] = [
 	openrouter2Provider,
 	opencodeGoProvider,
 	clineProvider,
+	zaiProvider,
 ];
 
 export function providerForAliasPrefix(prefix: string): QuotaProvider | undefined {
