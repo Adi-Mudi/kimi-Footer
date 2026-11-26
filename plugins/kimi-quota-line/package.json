@@ -1,6 +1,6 @@
 {
 	"name": "kimi-quota-line",
-	"version": "1.3.3",
+	"version": "1.3.4",
 	"description": "Kimi Code CLI status line plugin — sunset folder + Kimi/MiniMax quota bars (kimi-native)",
 	"type": "module",
 	"license": "MIT",

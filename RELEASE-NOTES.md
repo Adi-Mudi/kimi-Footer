@@ -6,6 +6,27 @@ per release.
 
 ---
 
+## v1.3.4-monthly — 2026-11-26 — Monthly quota (M:)
+
+**Tag**: `v1.3.4-monthly` · **Branch**: `dev` · **PR**: #3
+
+### Highlights
+
+- Optional monthly metric `M:%` when the provider reports it.
+- Order when present: `M:%` → `W:%` → `5H:%`. Hidden when absent.
+- Kimi: parses `usages.limit_month_total` / `limit_month_code`.
+- OpenCode Go: keeps `usage.monthly` (was discarded).
+- `monthlyPaceColor` — 720 h window, 24 h grace.
+- OpenRouter / MiniMax / CL-P unchanged.
+- Live verify: `OPC-G  mimo-v2.6-flash  M:38%  W:29%  5H:1%`.
+
+### Verification
+
+- typecheck PASS · unit 198/198 (git-footer env-excluded) · stress 5/5 · build PASS
+- Plugin AGENTS.md / README / CHANGELOG updated
+
+---
+
 ## v1.3.3-multisession — 2026-11-24 — Multi-session provider + labels
 
 **Tag**: `v1.3.3-multisession` · **Branch**: `main`

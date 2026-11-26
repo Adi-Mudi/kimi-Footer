@@ -1,6 +1,6 @@
 {
 	"name": "kimi-quota-line",
-	"version": "1.3.3",
+	"version": "1.3.4",
 	"description": "Sunset-gradient folder + Kimi/MiniMax quota bars on the kimi-code status line",
 	"keywords": ["kimi", "status-line", "quota", "minimax", "footer"],
 	"author": "divakaran",
