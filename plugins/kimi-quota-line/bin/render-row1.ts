@@ -2,7 +2,7 @@
 
 import { pathToFileURL } from "node:url";
 import { getGitDetails } from "../src/git-footer.js";
-import { sessionPaceColor, statusFg, weeklyPaceColor } from "../src/helpers.js";
+import { monthlyPaceColor, sessionPaceColor, statusFg, weeklyPaceColor } from "../src/helpers.js";
 import { formatProviderLabel, formatWorktreeMarker, pickBlinkPhase } from "../src/label-blink.js";
 import { fullModelName, resolveForSession, shortLabelFor } from "../src/model-detect.js";
 import { readQuotaCache } from "../src/quota-cache.js";
@@ -38,11 +38,28 @@ export function visibleWidth(s: string): number {
 	return w;
 }
 
-function usedPct(d: QuotaData, which: "w" | "h"): number {
-	const used = which === "w" ? d.wUsed : d.hUsed;
-	const limit = which === "w" ? d.wLimit : d.hLimit;
+function usedPct(d: QuotaData, which: "m" | "w" | "h"): number {
+	const used = which === "m" ? (d.mUsed ?? 0) : which === "w" ? d.wUsed : d.hUsed;
+	const limit = which === "m" ? (d.mLimit ?? 0) : which === "w" ? d.wLimit : d.hLimit;
 	if (limit <= 0) return 0;
 	return Math.round((used / limit) * 100);
+}
+
+function hasMonthly(d: QuotaData): boolean {
+	return typeof d.mUsed === "number" && typeof d.mLimit === "number" && d.mLimit > 0;
+}
+
+function windowMetrics(d: QuotaData): string {
+	const parts: string[] = [];
+	if (hasMonthly(d)) {
+		const mColor = monthlyPaceColor(d.mUsed ?? 0, d.mLimit ?? 0, d.mResetAt);
+		parts.push(statusFg(mColor, `M:${usedPct(d, "m")}%`));
+	}
+	const wColor = weeklyPaceColor(d.wUsed, d.wLimit, d.wResetAt);
+	const hColor = sessionPaceColor(d.hUsed, d.hLimit, d.hResetAt);
+	parts.push(statusFg(wColor, `W:${usedPct(d, "w")}%`));
+	parts.push(statusFg(hColor, `5H:${usedPct(d, "h")}%`));
+	return parts.join("  ");
 }
 
 function reqColor(r: RequestQuotaData): "success" | "warning" | "error" {
@@ -60,22 +77,13 @@ function metricsFor(
 	if (!providerId || !cache) return undefined;
 
 	if (providerId === "kimi-code" && cache.kimi) {
-		const d = cache.kimi;
-		const wColor = weeklyPaceColor(d.wUsed, d.wLimit, d.wResetAt);
-		const hColor = sessionPaceColor(d.hUsed, d.hLimit, d.hResetAt);
-		return `${statusFg(wColor, `W:${usedPct(d, "w")}%`)}  ${statusFg(hColor, `5H:${usedPct(d, "h")}%`)}`;
+		return windowMetrics(cache.kimi);
 	}
 	if (providerId === "minimax" && cache.minimax) {
-		const d = cache.minimax;
-		const wColor = weeklyPaceColor(d.wUsed, d.wLimit, d.wResetAt);
-		const hColor = sessionPaceColor(d.hUsed, d.hLimit, d.hResetAt);
-		return `${statusFg(wColor, `W:${usedPct(d, "w")}%`)}  ${statusFg(hColor, `5H:${usedPct(d, "h")}%`)}`;
+		return windowMetrics(cache.minimax);
 	}
 	if (providerId === "opencode-go" && cache.opencodeGo) {
-		const d = cache.opencodeGo;
-		const wColor = weeklyPaceColor(d.wUsed, d.wLimit, d.wResetAt);
-		const hColor = sessionPaceColor(d.hUsed, d.hLimit, d.hResetAt);
-		return `${statusFg(wColor, `W:${usedPct(d, "w")}%`)}  ${statusFg(hColor, `5H:${usedPct(d, "h")}%`)}`;
+		return windowMetrics(cache.opencodeGo);
 	}
 	if (providerId === "openrouter" && cache.openrouter) {
 		const r = cache.openrouter;

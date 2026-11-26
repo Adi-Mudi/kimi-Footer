@@ -35,6 +35,7 @@ interface KimiUsageResponse {
 		window?: { duration?: number | string; timeUnit?: string };
 		detail?: Record<string, unknown>;
 	}>;
+	usages?: Record<string, { used_ratio?: number; reset_time?: string }>;
 }
 
 export function getKimiToken(): string | null {
@@ -78,7 +79,17 @@ export async function fetchKimiUsage(): Promise<void> {
 		const hLimit = Number(window?.detail?.limit || 1);
 		const hResetAt = getResetAt(window?.detail);
 		const hRemaining = formatRemaining(hResetAt);
-		currentData = { wUsed, wLimit, wResetAt, hUsed, hLimit, hResetAt, hRemaining };
+		const monthBucket = data.usages?.limit_month_total ?? data.usages?.limit_month_code;
+		const mRatio = Number(monthBucket?.used_ratio);
+		const monthly =
+			Number.isFinite(mRatio) && mRatio >= 0
+				? {
+						mUsed: Math.round(mRatio * 10000) / 100,
+						mLimit: 100,
+						mResetAt: monthBucket?.reset_time,
+					}
+				: {};
+		currentData = { wUsed, wLimit, wResetAt, hUsed, hLimit, hResetAt, hRemaining, ...monthly };
 	} catch {
 		currentData = null;
 	}

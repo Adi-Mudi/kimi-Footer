@@ -33,6 +33,26 @@ export function weeklyPaceColor(used: number, limit: number, resetAt?: string): 
 	return "error";
 }
 
+export function monthlyPaceColor(used: number, limit: number, resetAt?: string): StatusColor {
+	const MONTH_HOURS = 720;
+	const GRACE_HOURS = 24;
+	if (limit <= 0) return "success";
+	const actualPercent = (used / limit) * 100;
+	const elapsedHours = MONTH_HOURS - hoursUntilReset(resetAt);
+
+	if (elapsedHours < GRACE_HOURS || elapsedHours >= MONTH_HOURS) {
+		if (actualPercent >= 100) return "error";
+		if (actualPercent >= 80) return "warning";
+		return "success";
+	}
+
+	const expectedPercent = (elapsedHours / MONTH_HOURS) * 100;
+	const paceRatio = (actualPercent / expectedPercent) * 100;
+	if (paceRatio <= 79) return "success";
+	if (paceRatio <= 99) return "warning";
+	return "error";
+}
+
 export function sessionPaceColor(used: number, limit: number, resetAt?: string): StatusColor {
 	const WINDOW_HOURS = 5;
 	const GRACE_HOURS = 0.25;

@@ -53,6 +53,15 @@ export async function fetchOpenCodeGoUsage(): Promise<void> {
 		const json = (await res.json()) as OpenCodeGoUsageResponse;
 		const w = meterToPair(json.usage?.weekly);
 		const h = meterToPair(json.usage?.rolling);
+		const mRaw = json.usage?.monthly;
+		const monthly =
+			mRaw && typeof mRaw.percent === "number"
+				? {
+						mUsed: meterToPair(mRaw).used,
+						mLimit: 100,
+						mResetAt: mRaw.resetsAt,
+					}
+				: {};
 		currentData = {
 			wUsed: w.used,
 			wLimit: w.limit,
@@ -61,6 +70,7 @@ export async function fetchOpenCodeGoUsage(): Promise<void> {
 			hLimit: h.limit,
 			hResetAt: h.resetAt,
 			hRemaining: formatRemaining(h.resetAt),
+			...monthly,
 		};
 	} catch {
 		currentData = null;
