@@ -39,6 +39,7 @@ export interface QuotaCache {
 	openrouter2?: RequestQuotaData | null;
 	opencodeGo?: QuotaData | null;
 	cline?: QuotaData | null;
+	zai?: QuotaData | null;
 	sessions?: Record<string, SessionEntry>;
 	keyStatus?: Record<string, "ok" | "key" | "api">;
 	modelIndex?: Record<string, string>;

@@ -47,6 +47,7 @@ function emptyCacheSlots(): Omit<QuotaCache, "ts" | "model"> {
 		openrouter2: null,
 		opencodeGo: null,
 		cline: null,
+		zai: null,
 	};
 }
 
@@ -131,6 +132,7 @@ async function main(): Promise<void> {
 			openrouter2: existing?.openrouter2 ?? null,
 			opencodeGo: existing?.opencodeGo ?? null,
 			cline: existing?.cline ?? null,
+			zai: existing?.zai ?? null,
 			sessions,
 			modelIndex: buildModelIndex(),
 		};
@@ -165,12 +167,12 @@ async function main(): Promise<void> {
 		const data = p.getData();
 		if (data !== null && data !== undefined) {
 			cache[key] = data as never;
-			keyStatus[p.aliasPrefixes[0] ?? p.id] = "ok";
+			if (p.hasUsageApi !== false) keyStatus[p.aliasPrefixes[0] ?? p.id] = "ok";
 		} else {
 			if (existing) {
 				cache[key] = (existing as unknown as Record<string, unknown>)[key] as never;
 			}
-			keyStatus[p.aliasPrefixes[0] ?? p.id] = "key";
+			if (p.hasUsageApi !== false) keyStatus[p.aliasPrefixes[0] ?? p.id] = "key";
 		}
 	}
 	cache.keyStatus = keyStatus;

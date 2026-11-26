@@ -24,6 +24,11 @@ export function isClineModel(modelIdOrName?: string): boolean {
 	return id.startsWith("cline-pass/") || id.startsWith("cline/") || id.includes("cline-pass");
 }
 
+export function isZaiModel(modelIdOrName?: string): boolean {
+	const id = (modelIdOrName ?? "").toString().toLowerCase();
+	return id.startsWith("zai-coding-plan/") || id.includes("zai-coding-plan");
+}
+
 export const KNOWN_PROVIDER_PREFIXES: readonly string[] = [
 	"kimi-code",
 	"minimax",
@@ -31,6 +36,7 @@ export const KNOWN_PROVIDER_PREFIXES: readonly string[] = [
 	"openrouter-2",
 	"opencode-go",
 	"cline-pass",
+	"zai-coding-plan",
 ];
 
 export const SHORT_LABELS: Readonly<Record<string, string>> = {
@@ -40,6 +46,7 @@ export const SHORT_LABELS: Readonly<Record<string, string>> = {
 	openrouter: "OR",
 	"openrouter-2": "OR2",
 	"cline-pass": "CL-P",
+	"zai-coding-plan": "ZAI",
 };
 
 export const SHORT_LABEL_WIDTH = 4;
@@ -181,18 +188,48 @@ function lookupModelIndex(
 	return null;
 }
 
+function lookupModelIndexExact(
+	modelIndex: Record<string, string> | undefined,
+	payloadModel: string,
+): string | null {
+	if (!modelIndex) return null;
+	const target = payloadModel.trim();
+	if (!target) return null;
+	const exact = modelIndex[target];
+	if (exact) {
+		const pid = resolveProviderId(exact.replace(/^managed:/, ""));
+		if (pid) return pid;
+	}
+	const lower = target.toLowerCase();
+	for (const [k, v] of Object.entries(modelIndex)) {
+		if (k.trim().toLowerCase() === lower) {
+			const pid = resolveProviderId(v.replace(/^managed:/, ""));
+			if (pid) return pid;
+		}
+	}
+	return null;
+}
+
 export function resolveForSession(
 	payloadModel: string,
 	cache: { model?: string | null; sessions?: Record<string, { model: string | null; provider?: string | null; updatedAt?: number }>; modelIndex?: Record<string, string> } | null | undefined,
 	sessionId: string | null | undefined,
 ): string | null {
 	const a = parseModelAlias(payloadModel);
+	const fromSession = sessionCacheModel(cache, sessionId);
 	if (a.provider) {
 		const pid = resolveProviderId(a.provider);
 		if (pid) return pid;
+		if (fromSession) {
+			const s = parseModelAlias(fromSession);
+			if (s.provider && s.name.trim().toLowerCase() === payloadModel.trim().toLowerCase()) {
+				const sid = resolveProviderId(s.provider);
+				if (sid) return sid;
+			}
+		}
+		return lookupModelIndexExact(cache?.modelIndex, payloadModel);
 	}
-	const fromSession = sessionCacheModel(cache, sessionId);
-	if (fromSession && !a.provider && sameModelName(payloadModel, fromSession)) {
+	if (fromSession && sameModelName(payloadModel, fromSession)) {
 		const s = parseModelAlias(fromSession);
 		if (s.provider) {
 			const sid = resolveProviderId(s.provider);
@@ -202,6 +239,5 @@ export function resolveForSession(
 	}
 	const idxPid = lookupModelIndex(cache?.modelIndex, payloadModel, a.name);
 	if (idxPid) return idxPid;
-	if (a.provider) return null;
 	return bareNameProviderId(payloadModel);
 }

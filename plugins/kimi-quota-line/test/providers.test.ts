@@ -9,6 +9,7 @@ import {
 	opencodeGoProvider,
 	openrouter2Provider,
 	openrouterProvider,
+	zaiProvider,
 } from "../src/providers.js";
 import type { QuotaCache } from "../src/types.js";
 
@@ -21,6 +22,7 @@ describe("provider registry", () => {
 			"openrouter-2",
 			"opencode-go",
 			"cline-pass",
+			"zai-coding-plan",
 		]);
 	});
 
@@ -38,6 +40,7 @@ describe("provider registry", () => {
 		expect(openrouter2Provider.cacheKey).toBe("openrouter2");
 		expect(opencodeGoProvider.cacheKey).toBe("opencodeGo");
 		expect(clineProvider.cacheKey).toBe("cline");
+		expect(zaiProvider.cacheKey).toBe("zai");
 	});
 
 	it("shortLabel matches locked design", () => {
@@ -47,6 +50,7 @@ describe("provider registry", () => {
 		expect(openrouter2Provider.shortLabel).toBe("OR2");
 		expect(opencodeGoProvider.shortLabel).toBe("OPC-G");
 		expect(clineProvider.shortLabel).toBe("CL-P");
+		expect(zaiProvider.shortLabel).toBe("ZAI");
 	});
 
 	it("aliasPrefixes cover all known prefixes", () => {
@@ -58,6 +62,7 @@ describe("provider registry", () => {
 			"opencode-go",
 			"openrouter",
 			"openrouter-2",
+			"zai-coding-plan",
 		]);
 	});
 
@@ -68,6 +73,7 @@ describe("provider registry", () => {
 		expect(opencodeGoProvider.matches("opencode-go/kimi-k3")).toBe(true);
 		expect(openrouterProvider.matches("openrouter/anthropic/claude-opus-4.8")).toBe(true);
 		expect(clineProvider.matches("cline-pass/cline-pass/muse")).toBe(true);
+		expect(zaiProvider.matches("zai-coding-plan/glm-5.3-flash")).toBe(true);
 	});
 
 	it("heartbeat assembly fills provider fields in order", () => {
@@ -80,6 +86,7 @@ describe("provider registry", () => {
 			openrouter2: null,
 			opencodeGo: null,
 			cline: null,
+			zai: null,
 		} as QuotaCache;
 		const filled: string[] = [];
 		for (const p of PROVIDERS) {
@@ -90,7 +97,7 @@ describe("provider registry", () => {
 			}
 			filled.push(key);
 		}
-		expect(filled).toEqual(["kimi", "minimax", "openrouter", "openrouter2", "opencodeGo", "cline"]);
+		expect(filled).toEqual(["kimi", "minimax", "openrouter", "openrouter2", "opencodeGo", "cline", "zai"]);
 		expect(Object.keys(cache)).toEqual([
 			"ts",
 			"model",
@@ -100,6 +107,7 @@ describe("provider registry", () => {
 			"openrouter2",
 			"opencodeGo",
 			"cline",
+			"zai",
 		]);
 	});
 });
